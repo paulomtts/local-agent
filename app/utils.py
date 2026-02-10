@@ -60,6 +60,11 @@ def search_files_by_content(
     return paths
 
 
+def deduplicate_paths(paths: list[str]) -> list[str]:
+    """Normalize and deduplicate file paths, preserving order."""
+    return list(dict.fromkeys(str(Path(name)) for name in paths))
+
+
 def read_file_contents(file_paths: list[str]) -> str:
     """Read files and format with === path === headers."""
     parts: list[str] = []
@@ -70,8 +75,3 @@ def read_file_contents(file_paths: list[str]) -> str:
         except (OSError, UnicodeDecodeError):
             continue
     return "\n".join(parts)
-
-
-def deduplicate_paths(paths: list[str]) -> list[str]:
-    """Normalize and deduplicate file paths, preserving order."""
-    return list(dict.fromkeys(str(Path(name)) for name in paths))
