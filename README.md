@@ -1,0 +1,5 @@
+## Design decisions
+
+- **Tool implementation location**: The `read_files` tool’s implementation logic, including its specific response model and prompt, lives in `app/logic/read_files.py`, while `main.py` only contains a thin `@tool` wrapper and shared agent orchestration. This keeps shared agent wiring separate from tool-specific behavior and makes the tool easier to reuse or test independently.
+- **Think tool implementation**: The `think` tool’s implementation, including its response model and prompt, lives in `app/logic/think.py`, while `main.py` exposes only the `@tool` wrapper and agent wiring. This mirrors the `read_files` structure and keeps orchestration decoupled from tool behavior.
+- **File reading strategy**: The `read_files` tool shells out to `grep` and `awk` to locate and print matching Python files with `=== path ===` headers. Before extracting file paths from `grep` output, it strips ANSI escape sequences and control characters so terminal control codes (such as bracketed paste toggles) do not end up in the filenames passed to `awk`.
