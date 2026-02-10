@@ -1,10 +1,6 @@
-"""Tests for app/logic/read_files.py.
+"""Tests for read_files_tool_impl and its utility functions."""
 
-Unit tests that mock TerminalSession and PyAIToolkit to isolate
-the search-and-read logic.
-"""
-
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.logic.read_files import (
@@ -12,229 +8,158 @@ from app.logic.read_files import (
     GenerateRelevantKeywords,
 )
 from app.utils import (
-    clean_terminal_output,
-    extract_paths_from_grep_output,
     search_files_by_name,
+    search_files_by_content,
+    read_file_contents,
     deduplicate_paths,
 )
 
 
 # ---------------------------------------------------------------------------
-# clean_terminal_output
+# search_files_by_name
 # ---------------------------------------------------------------------------
 
-class TestCleanTerminalOutput:
-    def test_strips_ansi_color_codes(self):
-        raw = "\x1B[31mhello\x1B[0m"
-        assert clean_terminal_output(raw) == "hello"
+class TestSearchFilesByName:
+    def test_finds_utils_by_keyword(self):
+        paths = search_files_by_name(["utils"])
+        normalized = [p.replace("\\", "/") for p in paths]
+        assert any("app/utils.py" in p for p in normalized)
 
-    def test_strips_cursor_movement(self):
-        raw = "\x1B[2Jhello"
-        assert clean_terminal_output(raw) == "hello"
+    def test_excludes_venv(self):
+        paths = search_files_by_name(["utils"])
+        assert not any(".venv" in p for p in paths)
 
-    def test_strips_carriage_return(self):
-        raw = "hello\r\nworld"
-        assert clean_terminal_output(raw) == "hello\nworld"
-
-    def test_strips_null_bytes(self):
-        raw = "hello\x00world"
-        assert clean_terminal_output(raw) == "helloworld"
-
-    def test_preserves_newlines(self):
-        raw = "hello world\nline2"
-        assert clean_terminal_output(raw) == "hello world\nline2"
-
-    def test_strips_bracketed_paste(self):
-        raw = "\x1B[?2004hhello\x1B[?2004l"
-        assert clean_terminal_output(raw) == "hello"
+    def test_no_match_returns_empty(self):
+        paths = search_files_by_name(["zzz_nonexistent_zzz"])
+        assert paths == []
 
 
 # ---------------------------------------------------------------------------
-# read_files_tool_impl — grep output parsing
+# search_files_by_content
 # ---------------------------------------------------------------------------
 
-class TestGrepOutputParsing:
-    """Test that file paths are correctly extracted from grep output."""
+class TestSearchFilesByContent:
+    def test_finds_file_containing_keyword(self):
+        paths = search_files_by_content(["ToolRegistry"])
+        normalized = [p.replace("\\", "/") for p in paths]
+        assert any("app/utils.py" in p for p in normalized)
 
+    def test_excludes_venv(self):
+        paths = search_files_by_content(["ToolRegistry"])
+        assert not any(".venv" in p for p in paths)
+
+    def test_no_match_returns_empty(self, tmp_path):
+        (tmp_path / "example.py").write_text("hello world")
+        paths = search_files_by_content(["nonexistent"], root=tmp_path)
+        assert paths == []
+
+
+# ---------------------------------------------------------------------------
+# read_file_contents
+# ---------------------------------------------------------------------------
+
+class TestReadFileContents:
+    def test_reads_file_with_header(self):
+        result = read_file_contents(["app/utils.py"])
+        assert "=== app/utils.py ===" in result
+        assert "get_tools_definitions" in result
+
+    def test_multiple_files(self):
+        result = read_file_contents(["app/utils.py", "app/logic/think.py"])
+        assert "=== app/utils.py ===" in result
+        assert "=== app/logic/think.py ===" in result
+
+    def test_missing_file_skipped(self):
+        result = read_file_contents(["nonexistent.py", "app/utils.py"])
+        assert "nonexistent" not in result
+        assert "=== app/utils.py ===" in result
+
+    def test_empty_list_returns_empty(self):
+        result = read_file_contents([])
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# deduplicate_paths
+# ---------------------------------------------------------------------------
+
+class TestDeduplicatePaths:
+    def test_removes_duplicates(self):
+        result = deduplicate_paths(["app/utils.py", "app/utils.py"])
+        assert result == ["app/utils.py"]
+
+    def test_normalizes_dot_slash(self):
+        result = deduplicate_paths(["./app/utils.py", "app/utils.py"])
+        assert result == ["app/utils.py"]
+
+    def test_preserves_order(self):
+        result = deduplicate_paths(["b.py", "a.py", "b.py"])
+        assert result == ["b.py", "a.py"]
+
+
+# ---------------------------------------------------------------------------
+# read_files_tool_impl (with mocked LLM)
+# ---------------------------------------------------------------------------
+
+class TestReadFilesToolImpl:
     @pytest.mark.asyncio
-    async def test_extracts_paths_from_grep(self):
-        mock_session = MagicMock()
+    async def test_finds_and_reads_utils(self):
         mock_toolkit = AsyncMock()
-
-        # Simulate LLM returning keywords
         mock_response = MagicMock()
-        mock_response.content = GenerateRelevantKeywords(
-            keywords=["TerminalSession"]
-        )
+        mock_response.content = GenerateRelevantKeywords(keywords=["utils"])
         mock_toolkit.asend.return_value = mock_response
 
-        # Simulate grep finding a match
-        mock_session.execute.side_effect = [
-            # grep call
-            "./app/sessions.py:8:class TerminalSession:\n"
-            "./app/factories.py:3:from app.sessions import TerminalSession",
-            # awk call
-            "=== ./app/sessions.py ===\nimport os\n=== ./app/factories.py ===\nimport pty",
-        ]
-
         result = await read_files_tool_impl(
-            terminal_session=mock_session,
-            context="Find the TerminalSession class",
+            context="Read the utils file",
             toolkit=mock_toolkit,
         )
-
-        assert "=== ./app/sessions.py ===" in result
-        assert "=== ./app/factories.py ===" in result
+        assert "=== app/utils.py ===" in result
+        assert "get_tools_definitions" in result
 
     @pytest.mark.asyncio
-    async def test_empty_keywords_after_strip_returns_message(self):
-        """If LLM returns only whitespace keywords, they get stripped to empty."""
-        mock_session = MagicMock()
+    async def test_empty_keywords_after_strip(self):
         mock_toolkit = AsyncMock()
-
         mock_response = MagicMock()
         mock_response.content = MagicMock()
         mock_response.content.keywords = ["  ", ""]
         mock_toolkit.asend.return_value = mock_response
 
         result = await read_files_tool_impl(
-            terminal_session=mock_session,
             context="something",
             toolkit=mock_toolkit,
         )
         assert result == "No relevant keywords found."
 
     @pytest.mark.asyncio
-    async def test_no_grep_results_returns_message(self):
-        mock_session = MagicMock()
-        mock_toolkit = AsyncMock()
+    async def test_no_files_found(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "empty.py").write_text("nothing useful here")
 
+        mock_toolkit = AsyncMock()
         mock_response = MagicMock()
         mock_response.content = GenerateRelevantKeywords(
-            keywords=["nonexistent_keyword"]
+            keywords=["nonexistent"]
         )
         mock_toolkit.asend.return_value = mock_response
 
-        # grep returns nothing
-        mock_session.execute.return_value = ""
-
         result = await read_files_tool_impl(
-            terminal_session=mock_session,
             context="something",
             toolkit=mock_toolkit,
         )
         assert result == "No relevant files found."
 
     @pytest.mark.asyncio
-    async def test_awk_empty_returns_no_content_message(self):
-        mock_session = MagicMock()
+    async def test_finds_file_by_content_not_name(self):
+        """A keyword in file content but not filename should still find the file."""
         mock_toolkit = AsyncMock()
-
-        mock_response = MagicMock()
-        mock_response.content = GenerateRelevantKeywords(keywords=["utils"])
-        mock_toolkit.asend.return_value = mock_response
-
-        # grep finds a file, awk returns nothing
-        mock_session.execute.side_effect = [
-            "./app/utils.py:1:from pygents import ToolRegistry",  # grep
-            "",  # awk
-        ]
-
-        result = await read_files_tool_impl(
-            terminal_session=mock_session,
-            context="read utils",
-            toolkit=mock_toolkit,
-        )
-        assert result == "No content read from files."
-
-    @pytest.mark.asyncio
-    async def test_deduplicates_file_names(self):
-        mock_session = MagicMock()
-        mock_toolkit = AsyncMock()
-
         mock_response = MagicMock()
         mock_response.content = GenerateRelevantKeywords(
-            keywords=["utils", "util"]
+            keywords=["ToolRegistry"]
         )
         mock_toolkit.asend.return_value = mock_response
 
-        calls = []
-
-        def track_execute(cmd, **kwargs):
-            calls.append(cmd)
-            if "grep" in cmd:
-                return "./app/utils.py:1:from pygents import ToolRegistry"
-            if "awk" in cmd:
-                return "=== ./app/utils.py ===\nfrom pygents import ToolRegistry"
-            return ""
-
-        mock_session.execute.side_effect = track_execute
-
         result = await read_files_tool_impl(
-            terminal_session=mock_session,
-            context="read utils",
+            context="Find ToolRegistry",
             toolkit=mock_toolkit,
         )
-
-        # Verify awk was called with the file only once (deduplicated)
-        awk_calls = [c for c in calls if "awk" in c]
-        assert len(awk_calls) == 1
-        assert awk_calls[0].count("app/utils.py") == 1
-
-    @pytest.mark.asyncio
-    async def test_finds_file_by_name_even_when_grep_misses_content(self):
-        """Keyword 'utils' should find app/utils.py by filename even if
-        grep doesn't match its contents."""
-        mock_session = MagicMock()
-        mock_toolkit = AsyncMock()
-
-        mock_response = MagicMock()
-        mock_response.content = GenerateRelevantKeywords(keywords=["utils"])
-        mock_toolkit.asend.return_value = mock_response
-
-        calls = []
-
-        def track_execute(cmd, **kwargs):
-            calls.append(cmd)
-            if "grep" in cmd:
-                return ""  # grep finds nothing in content
-            if "awk" in cmd:
-                return "=== app/utils.py ===\nfrom pygents import ToolRegistry"
-            return ""
-
-        mock_session.execute.side_effect = track_execute
-
-        result = await read_files_tool_impl(
-            terminal_session=mock_session,
-            context="read utils",
-            toolkit=mock_toolkit,
-        )
-
-        # File should be found by name and read via awk
-        awk_calls = [c for c in calls if "awk" in c]
-        assert len(awk_calls) == 1
-        assert "utils" in awk_calls[0]
         assert "=== app/utils.py ===" in result
-
-    @pytest.mark.asyncio
-    async def test_handles_grep_lines_without_colon(self):
-        """Lines without ':' (like blank lines or warnings) should be skipped."""
-        mock_session = MagicMock()
-        mock_toolkit = AsyncMock()
-
-        mock_response = MagicMock()
-        mock_response.content = GenerateRelevantKeywords(keywords=["test"])
-        mock_toolkit.asend.return_value = mock_response
-
-        mock_session.execute.side_effect = [
-            # grep returns some noise alongside a valid match
-            "Binary file matches\n./app/utils.py:1:test line",
-            "=== ./app/utils.py ===\ntest line",
-        ]
-
-        result = await read_files_tool_impl(
-            terminal_session=mock_session,
-            context="find test",
-            toolkit=mock_toolkit,
-        )
-        assert "=== ./app/utils.py ===" in result

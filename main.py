@@ -4,7 +4,6 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pygents import Agent, Turn, tool
 
-from app.factories import get_terminal_session
 from app.logic.read_files import read_files_tool_impl
 from app.logic.think import think_tool_impl
 
@@ -12,14 +11,12 @@ load_dotenv()
 
 config = LLMConfig()
 toolkit = PyAIToolkit(config)
-terminal_session = get_terminal_session()
 
 
 @tool()
 async def read_files(context: str):
     "Use to find and read relevant files."
     file_contents = await read_files_tool_impl(
-        terminal_session=terminal_session,
         context=context,
         toolkit=toolkit,
     )
@@ -58,7 +55,6 @@ async def run_agent():
             if isinstance(output, str):
                 print(output, end="", flush=True)
         print()
-    terminal_session.close()
 
 
 if __name__ == "__main__":

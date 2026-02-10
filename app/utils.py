@@ -1,11 +1,7 @@
-import re
 from pathlib import Path
 
 from pygents import ToolRegistry
 
-
-ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
-CONTROL_RE = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
 
 EXCLUSION_DIRS = [
     ".venv",
@@ -16,18 +12,6 @@ EXCLUSION_DIRS = [
     ".vscode",
 ]
 
-EXCLUSION_FILES = [
-    "__pycache__",
-    "*.pyc",
-    "*.pyo",
-    "*.pyd",
-    "*.pyw",
-    "*.pyz",
-    ".gitignore",
-    ".env",
-    ".env.*",
-]
-
 
 def get_tools_definitions() -> str:
     definitions = ""
@@ -36,27 +20,9 @@ def get_tools_definitions() -> str:
     return definitions
 
 
-def clean_terminal_output(raw_output: str) -> str:
-    cleaned_output = ANSI_ESCAPE_RE.sub("", raw_output)
-    cleaned_output = CONTROL_RE.sub("", cleaned_output)
-    return cleaned_output
-
-
-def extract_paths_from_grep_output(grep_output: list[str]) -> list[str]:
-    """Extract file paths from grep --line-number output lines."""
-    paths: list[str] = []
-    lines = "\n".join(grep_output).strip().split("\n")
-    for line in lines:
-        if not line or ":" not in line:
-            continue
-        path = line.split(":", 1)[0].strip()
-        if path:
-            paths.append(path)
-    return paths
-
-
 def search_files_by_name(
     keywords: list[str],
+    root: Path | str = ".",
     exclusion_dirs: list[str] | None = None,
 ) -> list[str]:
     """Find .py files whose names contain any of the given keywords."""
@@ -64,11 +30,46 @@ def search_files_by_name(
         exclusion_dirs = EXCLUSION_DIRS
     paths: list[str] = []
     for keyword in keywords:
-        for path in Path(".").rglob(f"*{keyword}*.py"):
+        for path in Path(root).rglob(f"*{keyword}*.py"):
             if any(excluded in path.parts for excluded in exclusion_dirs):
                 continue
             paths.append(str(path))
     return paths
+
+
+def search_files_by_content(
+    keywords: list[str],
+    root: Path | str = ".",
+    exclusion_dirs: list[str] | None = None,
+) -> list[str]:
+    """Find .py files whose contents contain any of the given keywords."""
+    if exclusion_dirs is None:
+        exclusion_dirs = EXCLUSION_DIRS
+    paths: list[str] = []
+    for py_file in Path(root).rglob("*.py"):
+        if any(excluded in py_file.parts for excluded in exclusion_dirs):
+            continue
+        try:
+            content = py_file.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for keyword in keywords:
+            if keyword in content:
+                paths.append(str(py_file))
+                break
+    return paths
+
+
+def read_file_contents(file_paths: list[str]) -> str:
+    """Read files and format with === path === headers."""
+    parts: list[str] = []
+    for path in file_paths:
+        try:
+            content = Path(path).read_text()
+            parts.append(f"=== {path} ===\n{content}")
+        except (OSError, UnicodeDecodeError):
+            continue
+    return "\n".join(parts)
 
 
 def deduplicate_paths(paths: list[str]) -> list[str]:
