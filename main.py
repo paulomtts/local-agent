@@ -2,11 +2,11 @@ import asyncio
 from dotenv import load_dotenv
 from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
-from pygents import Agent, Turn, Memory, tool
+from pygents import Agent, Turn, Memory, tool, ToolRegistry
 
-from app.logic.compact import make_compact_callback
-from app.logic.read_files import read_files_tool_impl
-from app.logic.think import think_tool_impl
+from app.hooks.compact import compact_memory
+from app.tools.read_files import get_file_contents
+from app.tools.think import decide_next_tool
 
 load_dotenv()
 
@@ -18,7 +18,7 @@ toolkit = PyAIToolkit(config)
 async def read_files(memory: Memory):
     "Use to find and read relevant files."
     context = "\n".join(str(item) for item in memory)
-    file_contents = await read_files_tool_impl(
+    file_contents = await get_file_contents(
         context=context,
         toolkit=toolkit,
     )
@@ -38,7 +38,9 @@ async def respond(memory: Memory):
 
 @tool
 async def think(memory: Memory):
-    return await think_tool_impl(memory=memory, toolkit=toolkit)
+    tool_name = await decide_next_tool(memory=memory, toolkit=toolkit)
+    target_tool = ToolRegistry.get(tool_name)
+    return Turn(target_tool, args=[memory])
 
 
 async def run_agent():
@@ -47,7 +49,7 @@ async def run_agent():
         description="A helpful assistant with access to tools.",
         tools=[read_files, respond, think],
     )
-    memory = Memory(limit=20, hooks=[make_compact_callback(config)])
+    memory = Memory(limit=20, hooks=[compact_memory])
     while True:
         message = input("You: ")
         if message.lower() in ["exit", "quit"]:

@@ -1,14 +1,17 @@
 import asyncio
 import os
 import threading
-from collections.abc import Callable
 from typing import Any
 
 import tiktoken
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
+from pygents import hook, MemoryHook
 
+load_dotenv()
+_config = LLMConfig()
 
 WORKING_MEMORY_TOKEN_THRESHOLD = int(
     os.environ.get("WORKING_MEMORY_TOKEN_THRESHOLD", "10000")
@@ -18,7 +21,7 @@ COMPACT_PROMPT = """Summarize the following conversation and context into a sing
 
 ---
 
-{context}
+{{ context }}
 
 ---
 
@@ -46,8 +49,8 @@ async def _compact_async(items: list[Any], toolkit: PyAIToolkit) -> str:
     return output.content.summary
 
 
-def _run_compaction_in_thread(items: list[Any], config: LLMConfig) -> list[str]:
-    toolkit = PyAIToolkit(config)
+def _run_compaction_in_thread(items: list[Any]) -> list[str]:
+    toolkit = PyAIToolkit(_config)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -57,27 +60,28 @@ def _run_compaction_in_thread(items: list[Any], config: LLMConfig) -> list[str]:
         loop.close()
 
 
-def make_compact_callback(
-    config: LLMConfig,
-    token_threshold: int = WORKING_MEMORY_TOKEN_THRESHOLD,
-) -> Callable[[list[Any]], list[Any]]:
-    def compact(items: list[Any]) -> list[Any]:
-        if not items:
-            return items
-        text = "\n".join(str(item) for item in items)
-        if _token_count(text) < token_threshold:
-            return items
-        result: list[Any] = []
-        done = threading.Event()
+@hook(
+    MemoryHook.BEFORE_APPEND,
+    token_threshold=WORKING_MEMORY_TOKEN_THRESHOLD,
+)
+async def compact_memory(
+    items: list[Any],
+    *,
+    token_threshold: int,
+) -> None:
+    if not items:
+        return
+    text = "\n".join(str(item) for item in items)
+    if _token_count(text) < token_threshold:
+        return
+    done = threading.Event()
+    compacted: list[Any] = []
 
-        def in_thread() -> None:
-            nonlocal result
-            result = _run_compaction_in_thread(items, config)
-            done.set()
+    def in_thread() -> None:
+        nonlocal compacted
+        compacted = _run_compaction_in_thread(items)
+        done.set()
 
-        thread = threading.Thread(target=in_thread)
-        thread.start()
-        done.wait()
-        return result
-
-    return compact
+    thread = threading.Thread(target=in_thread)
+    thread.start()
+    done.wait()

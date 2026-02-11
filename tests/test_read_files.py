@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.logic.read_files import (
-    read_files_tool_impl,
+    get_file_contents,
     GenerateRelevantKeywords,
 )
 from app.utils import (
@@ -18,6 +18,7 @@ from app.utils import (
 # ---------------------------------------------------------------------------
 # search_files_by_name
 # ---------------------------------------------------------------------------
+
 
 class TestSearchFilesByName:
     def test_finds_utils_by_keyword(self):
@@ -38,6 +39,7 @@ class TestSearchFilesByName:
 # search_files_by_content
 # ---------------------------------------------------------------------------
 
+
 class TestSearchFilesByContent:
     def test_finds_file_containing_keyword(self):
         paths = search_files_by_content(["ToolRegistry"])
@@ -57,6 +59,7 @@ class TestSearchFilesByContent:
 # ---------------------------------------------------------------------------
 # read_file_contents
 # ---------------------------------------------------------------------------
+
 
 class TestReadFileContents:
     def test_reads_file_with_header(self):
@@ -83,6 +86,7 @@ class TestReadFileContents:
 # deduplicate_paths
 # ---------------------------------------------------------------------------
 
+
 class TestDeduplicatePaths:
     def test_removes_duplicates(self):
         result = deduplicate_paths(["app/utils.py", "app/utils.py"])
@@ -101,6 +105,7 @@ class TestDeduplicatePaths:
 # read_files_tool_impl (with mocked LLM)
 # ---------------------------------------------------------------------------
 
+
 class TestReadFilesToolImpl:
     @pytest.mark.asyncio
     async def test_finds_and_reads_utils(self):
@@ -109,7 +114,7 @@ class TestReadFilesToolImpl:
         mock_response.content = GenerateRelevantKeywords(keywords=["utils"])
         mock_toolkit.asend.return_value = mock_response
 
-        result = await read_files_tool_impl(
+        result = await get_file_contents(
             context="Read the utils file",
             toolkit=mock_toolkit,
         )
@@ -124,7 +129,7 @@ class TestReadFilesToolImpl:
         mock_response.content.keywords = ["  ", ""]
         mock_toolkit.asend.return_value = mock_response
 
-        result = await read_files_tool_impl(
+        result = await get_file_contents(
             context="something",
             toolkit=mock_toolkit,
         )
@@ -137,12 +142,10 @@ class TestReadFilesToolImpl:
 
         mock_toolkit = AsyncMock()
         mock_response = MagicMock()
-        mock_response.content = GenerateRelevantKeywords(
-            keywords=["nonexistent"]
-        )
+        mock_response.content = GenerateRelevantKeywords(keywords=["nonexistent"])
         mock_toolkit.asend.return_value = mock_response
 
-        result = await read_files_tool_impl(
+        result = await get_file_contents(
             context="something",
             toolkit=mock_toolkit,
         )
@@ -153,12 +156,10 @@ class TestReadFilesToolImpl:
         """A keyword in file content but not filename should still find the file."""
         mock_toolkit = AsyncMock()
         mock_response = MagicMock()
-        mock_response.content = GenerateRelevantKeywords(
-            keywords=["ToolRegistry"]
-        )
+        mock_response.content = GenerateRelevantKeywords(keywords=["ToolRegistry"])
         mock_toolkit.asend.return_value = mock_response
 
-        result = await read_files_tool_impl(
+        result = await get_file_contents(
             context="Find ToolRegistry",
             toolkit=mock_toolkit,
         )

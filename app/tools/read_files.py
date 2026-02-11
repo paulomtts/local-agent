@@ -30,7 +30,7 @@ RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search 
 """
 
 
-async def read_files_tool_impl(
+async def get_file_contents(
     context: str,
     toolkit: PyAIToolkit,
 ) -> str:

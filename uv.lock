@@ -1221,11 +1221,11 @@ wheels = [
 
 [[package]]
 name = "pygents"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/23/34/7437585c7b735a6f56d885b137bd405bcaea67d4d4404ea54894470b2298/pygents-0.3.0.tar.gz", hash = "sha256:a60e15650ec5a74ed2d94db0031eeb68e059fe7c20c15128b443fd855276a2b7", size = 14557, upload-time = "2026-02-11T01:28:32.709Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/7b/f0ba6dde1dd1899595aa5aecc03da6a47ea146db5a9e426686d6f9ba1a1f/pygents-0.3.1.tar.gz", hash = "sha256:2111ea7cb30354a3fb711828acb0e5f667e695ed04dec5a0fbd068ee887a9fb4", size = 14485, upload-time = "2026-02-11T02:15:48.558Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/40/65cfac14c8e045b5bd4ab822527d316e6ee6458201ff3070289ece209ee6/pygents-0.3.0-py3-none-any.whl", hash = "sha256:abe56a2b940a763de61f05efc433eebeef931e9b3ab8e346e09939bb0f98c09b", size = 16380, upload-time = "2026-02-11T01:28:31.918Z" },
+    { url = "https://files.pythonhosted.org/packages/91/54/a1663aa9d5450d2bfa0bd8dc07d6a9a04a197ef9c0ed217e0fdecfcde654/pygents-0.3.1-py3-none-any.whl", hash = "sha256:5c7736d12a5e07273f20795352593f273090ee461b4dfb190cead58ef96dc908", size = 16324, upload-time = "2026-02-11T02:15:47.429Z" },
 ]
 
 [[package]]
