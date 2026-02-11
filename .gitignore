@@ -11,3 +11,6 @@ wheels/
 
 # Environment variables
 .env
+
+# Context and plan docs
+.context/
