@@ -1,12 +1,22 @@
-from pydantic import BaseModel, Field
 from py_ai_toolkit import PyAIToolkit
+from pydantic import BaseModel, Field
+from pygents import Memory, Turn, tool
 
+from app.factories import get_toolkit
 from app.utils import (
     deduplicate_paths,
     read_file_contents,
     search_files_by_content,
     search_files_by_name,
 )
+
+from app.tools.think import think
+
+RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the context.
+
+# Context
+{{ context }}
+"""
 
 
 class GenerateRelevantKeywords(BaseModel):
@@ -23,17 +33,11 @@ class GenerateRelevantKeywords(BaseModel):
     )
 
 
-RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the context.
-
-# Context
-{{ context }}
-"""
-
-
 async def get_file_contents(
-    context: str,
+    memory: Memory,
     toolkit: PyAIToolkit,
 ) -> str:
+    context = "\n".join(str(item) for item in memory)
     search = await toolkit.asend(
         response_model=GenerateRelevantKeywords,
         template=RELEVANT_KEYWORDS_PROMPT,
@@ -54,3 +58,17 @@ async def get_file_contents(
 
     result = read_file_contents(file_names)
     return result or "No content read from files."
+
+
+@tool()
+async def read_files(memory: Memory):
+    "Use to find and read relevant files."
+    toolkit = get_toolkit()
+    file_contents = await get_file_contents(
+        memory=memory,
+        toolkit=toolkit,
+    )
+    await memory.append(
+        f"Used 'read_files' tool to find and read relevant files. Result:\n{file_contents}"
+    )
+    return Turn(think, args=[memory])
