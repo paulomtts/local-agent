@@ -3,10 +3,11 @@ from functools import lru_cache
 from py_ai_toolkit import PyAIToolkit
 from pygents import Agent, Memory
 
-from logging import DEBUG, getLogger
+from logging import INFO, getLogger, StreamHandler
 
 logger = getLogger("local_agent")
-logger.setLevel(DEBUG)
+logger.setLevel(INFO)
+logger.addHandler(StreamHandler())
 
 
 @lru_cache

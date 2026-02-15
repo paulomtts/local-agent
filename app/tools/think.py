@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from py_ai_toolkit import PyAIToolkit
 from pygents import Turn, Memory, ToolRegistry, tool
 
-from app.factories import get_toolkit
+from app.factories import get_toolkit, logger
 from app.utils import get_tools_definitions
 
 
@@ -40,6 +40,6 @@ async def decide_next_tool(memory: Memory, toolkit: PyAIToolkit) -> str:
 async def think(memory: Memory):
     toolkit = get_toolkit()
     tool_name = await decide_next_tool(memory=memory, toolkit=toolkit)
-    print(f"[Using tool: {tool_name}]")
+    logger.info(f"[Using tool: {tool_name}]")
     target_tool = ToolRegistry.get(tool_name)
     return Turn(target_tool, args=[memory])
