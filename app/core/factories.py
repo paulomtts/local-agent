@@ -22,8 +22,6 @@ def get_working_memory() -> Memory:
     from app.memory import after_append, load_working_memory
 
     memory = Memory(limit=40, hooks=[after_append])
-
-    # Load previous conversation from working.md
     items = load_working_memory()
     if items:
         memory.items.extend(items)
