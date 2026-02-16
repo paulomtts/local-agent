@@ -11,7 +11,6 @@ from app.memory import get_recent_context
 
 class ToolUse(BaseModel):
     name: Literal["read_files", "respond"] = Field(description="The tool to be used.")
-    # reasoning: str = Field(description="The reasoning behind your choice.")
 
 
 THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is to support the user by using one of the tools at your disposal. Rules:

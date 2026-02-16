@@ -19,13 +19,9 @@ from app.storage.database import (
 
 def example_basic_usage():
     """Demonstrate basic database operations."""
-    # Initialize database
     init_database()
-
-    # Get engine for session management
     engine = get_engine()
 
-    # Create an entity
     with Session(engine) as session:
         entity = Entity(
             name="Python",
@@ -34,8 +30,7 @@ def example_basic_usage():
             created_at=datetime.now().isoformat(),
         )
 
-        # Set embedding and aliases
-        entity.set_embedding([0.1] * 768)  # Example 768-dim embedding
+        entity.set_embedding([0.1] * 768)
         entity.set_aliases(["Python", "py", "python3", "Python 3"])
 
         session.add(entity)
@@ -45,11 +40,9 @@ def example_basic_usage():
         entity_id = entity.id
         print(f"Created entity with ID: {entity_id}")
 
-        # Index the entity for search
         index_entity_aliases(entity_id, entity.get_aliases())
         index_entity_embedding(entity_id, entity.get_embedding())
 
-    # Create another entity
     with Session(engine) as session:
         entity2 = Entity(
             name="JavaScript",
@@ -70,7 +63,6 @@ def example_basic_usage():
         index_entity_aliases(entity2_id, entity2.get_aliases())
         index_entity_embedding(entity2_id, entity2.get_embedding())
 
-    # Create a relationship
     with Session(engine) as session:
         relationship = Relationship(
             source_entity_id=entity_id,
@@ -85,18 +77,15 @@ def example_basic_usage():
         session.commit()
         print(f"Created relationship between {entity_id} and {entity2_id}")
 
-    # Search aliases using BM25
     print("\n=== BM25 Alias Search for 'python' ===")
     results = search_aliases_bm25("python", limit=5)
     print(f"Found entity IDs: {results}")
 
-    # Vector search
     print("\n=== Vector Search ===")
-    query_embedding = [0.1] * 768  # Similar to Python's embedding
+    query_embedding = [0.1] * 768
     results = vector_search(query_embedding, table="entity", limit=5)
     print(f"Vector search results (id, distance): {results}")
 
-    # Retrieve entities
     print("\n=== Retrieve Entities ===")
     with Session(engine) as session:
         entity = session.get(Entity, entity_id)
@@ -115,8 +104,4 @@ def example_clear_database():
 
 
 if __name__ == "__main__":
-    # Run basic example
     example_basic_usage()
-
-    # Uncomment to clear database
-    # example_clear_database()

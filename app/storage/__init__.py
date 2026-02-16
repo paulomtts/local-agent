@@ -19,21 +19,16 @@ from .database import (
 )
 
 __all__ = [
-    # Models
     "Entity",
     "Relationship",
-    # Database management
     "init_database",
     "clear_database",
     "get_engine",
-    # Indexing
     "index_entity_aliases",
     "index_entity_embedding",
     "index_relationship_embedding",
-    # Search
     "search_aliases_bm25",
     "vector_search",
-    # Retrieval
     "get_entity_by_id",
     "get_relationship_by_id",
 ]

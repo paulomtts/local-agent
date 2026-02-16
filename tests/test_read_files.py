@@ -15,11 +15,6 @@ from app.agent.utils.file_search import (
 )
 
 
-# ---------------------------------------------------------------------------
-# search_files_by_name
-# ---------------------------------------------------------------------------
-
-
 class TestSearchFilesByName:
     def test_finds_utils_by_keyword(self):
         paths = search_files_by_name(["utils"])
@@ -33,11 +28,6 @@ class TestSearchFilesByName:
     def test_no_match_returns_empty(self):
         paths = search_files_by_name(["zzz_nonexistent_zzz"])
         assert paths == []
-
-
-# ---------------------------------------------------------------------------
-# search_files_by_content
-# ---------------------------------------------------------------------------
 
 
 class TestSearchFilesByContent:
@@ -54,11 +44,6 @@ class TestSearchFilesByContent:
         (tmp_path / "example.py").write_text("hello world")
         paths = search_files_by_content(["nonexistent"], root=tmp_path)
         assert paths == []
-
-
-# ---------------------------------------------------------------------------
-# read_file_contents
-# ---------------------------------------------------------------------------
 
 
 class TestReadFileContents:
@@ -82,11 +67,6 @@ class TestReadFileContents:
         assert result == ""
 
 
-# ---------------------------------------------------------------------------
-# deduplicate_paths
-# ---------------------------------------------------------------------------
-
-
 class TestDeduplicatePaths:
     def test_removes_duplicates(self):
         result = deduplicate_paths(["app/utils.py", "app/utils.py"])
@@ -99,11 +79,6 @@ class TestDeduplicatePaths:
     def test_preserves_order(self):
         result = deduplicate_paths(["b.py", "a.py", "b.py"])
         assert result == ["b.py", "a.py"]
-
-
-# ---------------------------------------------------------------------------
-# read_files_tool_impl (with mocked LLM)
-# ---------------------------------------------------------------------------
 
 
 class TestReadFilesToolImpl:

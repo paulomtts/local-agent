@@ -15,6 +15,9 @@ wheels/
 # Context and plan docs
 .context/
 
+# Agent memory (created at runtime)
+.memory/
+
 # Database files
 database/memory.db
 database/*.db
