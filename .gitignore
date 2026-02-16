@@ -14,3 +14,7 @@ wheels/
 
 # Context and plan docs
 .context/
+
+# Database files
+database/memory.db
+database/*.db

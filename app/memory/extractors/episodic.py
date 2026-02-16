@@ -6,9 +6,10 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.logger import logger
+from app.core.logger import logger
+from app.memory.format import EPISODIC_TIMESTAMP_FORMAT
 
-EPISODIC_FILE = Path(__file__).resolve().parents[2] / "memory" / "episodic.md"
+EPISODIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "episodic.md"
 
 EPISODIC_PROMPT = """You are maintaining an episodic memory — a log of personal experiences tied to a specific moment in time. Episodic memory answers: "What happened, and in what context?"
 
@@ -33,12 +34,15 @@ class EpisodicEvent(BaseModel):
 
 
 class EpisodicExtraction(BaseModel):
-    events: list[EpisodicEvent] = Field(default_factory=list, description="Extracted episodic events.")
+    events: list[EpisodicEvent] = Field(
+        default_factory=list, description="Extracted episodic events."
+    )
 
 
 async def extract_episodic_memory(items: list[Any], user_message: str):
     logger.debug("\033[93m[TASK:episodic_memory]\033[0m")
-    context = "\n".join(str(item) for item in items)
+    # Use only last 5 items for context instead of all items
+    context = "\n".join(str(item) for item in items[-5:])
 
     config = LLMConfig()
     toolkit = PyAIToolkit(config)
@@ -54,7 +58,7 @@ async def extract_episodic_memory(items: list[Any], user_message: str):
         logger.debug("[TASK:episodic_memory] No new events extracted, skipping.")
         return
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now().strftime(EPISODIC_TIMESTAMP_FORMAT)
     lines = [f"## {timestamp}", ""] + [f"- {event.content}" for event in events] + [""]
     with EPISODIC_FILE.open("a") as f:
         f.write("\n".join(lines) + "\n")

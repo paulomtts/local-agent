@@ -1,1 +1,0 @@
-The user name is Paulo and he lives with two poms: Nina and Cherie!

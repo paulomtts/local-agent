@@ -12,16 +12,16 @@ def get_toolkit():
 @lru_cache
 def get_working_memory():
     """Get the working memory, which includes a hook to compact the memory if it exceeds the token threshold."""
-    from app.hooks.memory_after import after_append
+    from app.memory import after_append
 
-    return Memory(limit=20, hooks=[after_append])
+    return Memory(limit=40, hooks=[after_append])
 
 
 @lru_cache
 def get_agent():
-    from app.tools.read_files import read_files
-    from app.tools.respond import respond
-    from app.tools.think import think
+    from app.agent.tools.read_files import read_files
+    from app.agent.tools.respond import respond
+    from app.agent.tools.think import think
 
     return Agent(
         name="Local Agent",

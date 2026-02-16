@@ -4,13 +4,14 @@ from py_ai_toolkit import PyAIToolkit
 from pydantic import BaseModel, Field
 from pygents import Memory, ToolRegistry, Turn, tool
 
-from app.factories import get_toolkit
-from app.utils import get_tools_definitions
+from app.agent.utils.file_search import get_tools_definitions
+from app.core.factories import get_toolkit
+from app.memory import get_recent_context
 
 
 class ToolUse(BaseModel):
     name: Literal["read_files", "respond"] = Field(description="The tool to be used.")
-    reasoning: str = Field(description="The reasoning behind your choice.")
+    # reasoning: str = Field(description="The reasoning behind your choice.")
 
 
 THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is to support the user by using one of the tools at your disposal. Rules:
@@ -26,7 +27,7 @@ THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is
 
 async def decide_next_tool(memory: Memory, toolkit: PyAIToolkit) -> str:
     tools_definitions = get_tools_definitions()
-    context = "\n".join(str(item) for item in memory)
+    context = get_recent_context(memory, n=3)
     result = await toolkit.asend(
         response_model=ToolUse,
         template=THINK_PROMPT,

@@ -12,5 +12,6 @@ dependencies = [
     "pytest>=9.0.2",
     "python-dotenv>=1.2.1",
     "ruff>=0.15.0",
+    "sqlmodel>=0.0.22",
     "tiktoken>=0.8.0",
 ]

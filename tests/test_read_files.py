@@ -3,15 +3,15 @@
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
-from app.logic.read_files import (
-    get_file_contents,
+from app.agent.tools.read_files import (
     GenerateRelevantKeywords,
+    get_file_contents,
 )
-from app.utils import (
-    search_files_by_name,
-    search_files_by_content,
-    read_file_contents,
+from app.agent.utils.file_search import (
     deduplicate_paths,
+    read_file_contents,
+    search_files_by_content,
+    search_files_by_name,
 )
 
 

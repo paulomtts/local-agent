@@ -6,9 +6,9 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.logger import logger
+from app.core.logger import logger
 
-SEMANTIC_FILE = Path(__file__).resolve().parents[2] / "memory" / "semantic.md"
+SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
 SEMANTIC_PROMPT = """You are maintaining a semantic memory — a structured store of durable, decontextualized knowledge. Semantic memory stores what is true, not what happened or when it was learned.
 
@@ -46,17 +46,22 @@ If nothing qualifies, return an empty list.
 
 
 class SemanticFact(BaseModel):
-    content: str = Field(description="A stable, decontextualized fact free of temporal or situational language.")
+    content: str = Field(
+        description="A stable, decontextualized fact free of temporal or situational language."
+    )
 
 
 class SemanticExtraction(BaseModel):
-    facts: list[SemanticFact] = Field(default_factory=list, description="Extracted semantic facts.")
+    facts: list[SemanticFact] = Field(
+        default_factory=list, description="Extracted semantic facts."
+    )
 
 
 async def extract_semantic_memory(items: list[Any], user_message: str):
     logger.debug("\033[93m[TASK:semantic_memory]\033[0m")
     existing = SEMANTIC_FILE.read_text().strip() if SEMANTIC_FILE.exists() else ""
-    context = "\n".join(str(item) for item in items)
+    # Use only last 5 items for context instead of all items
+    context = "\n".join(str(item) for item in items[-5:])
 
     config = LLMConfig()
     toolkit = PyAIToolkit(config)

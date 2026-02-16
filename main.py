@@ -2,8 +2,9 @@ import asyncio
 
 from pygents import Turn
 
-from app.factories import get_agent, get_working_memory
-from app.tools.think import think
+from app.agent.tools.think import think
+from app.core.factories import get_agent, get_working_memory
+from app.memory import format_user_message
 
 
 async def run_agent():
@@ -13,7 +14,7 @@ async def run_agent():
         message = input("\033[90mYou:\033[0m ")
         if message.lower() in ["exit", "quit"]:
             break
-        await memory.append(f"User message: {message}")
+        await memory.append(format_user_message(message))
         first_turn = Turn(think, args=[memory])
         await agent.put(first_turn)
         # print("\033[96mAgent:\033[0m ", end="")  # Cyan color
