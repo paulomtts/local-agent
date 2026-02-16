@@ -4,7 +4,7 @@ from py_ai_toolkit import PyAIToolkit
 from pygents import Memory, tool
 
 from app.core.factories import get_toolkit
-from app.memory import format_assistant_response, get_conversation_pairs
+from app.memory import AssistantResponse, get_conversation_pairs
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
@@ -20,10 +20,8 @@ Respond to the user's latest message:"""
 
 
 async def generate_assistant_response(memory: Memory, toolkit: PyAIToolkit):
-    # Get recent conversation pairs (last 3 U-A exchanges)
     context = get_conversation_pairs(memory, n=3)
 
-    # Load semantic facts
     semantic_facts = "(none)"
     if SEMANTIC_FILE.exists():
         content = SEMANTIC_FILE.read_text().strip()
@@ -48,4 +46,4 @@ async def respond(memory: Memory):
             yield "⤷ "
         full_response += chunk
         yield chunk
-    await memory.append(format_assistant_response(full_response))
+    await memory.append(AssistantResponse(content=full_response))

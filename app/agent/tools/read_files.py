@@ -10,7 +10,7 @@ from app.agent.utils.file_search import (
     search_files_by_name,
 )
 from app.core.factories import get_toolkit
-from app.memory import format_tool_call, get_user_messages_only
+from app.memory import ToolCall, get_user_messages_only
 
 RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the context.
 
@@ -68,5 +68,5 @@ async def read_files(memory: Memory):
         memory=memory,
         toolkit=toolkit,
     )
-    await memory.append(format_tool_call("read_files", file_contents))
+    await memory.append(ToolCall(tool_name="read_files", result=file_contents))
     return Turn(think, args=[memory])

@@ -10,8 +10,14 @@ def get_toolkit():
 
 
 @lru_cache
-def get_working_memory():
-    """Get the working memory, which includes a hook to compact the memory if it exceeds the token threshold."""
+def get_working_memory() -> Memory:
+    """Get the working memory.
+
+    Returns:
+        Memory: Working memory limited to 40 items. Items stored are MemoryItemType
+            objects (UserMessage, AssistantResponse, ToolCall, or Compaction).
+            Includes a hook to compact memory if it exceeds the token threshold.
+    """
     from app.memory import after_append
 
     return Memory(limit=40, hooks=[after_append])
@@ -19,9 +25,7 @@ def get_working_memory():
 
 @lru_cache
 def get_agent():
-    from app.agent.tools.read_files import read_files
-    from app.agent.tools.respond import respond
-    from app.agent.tools.think import think
+    from app.agent.tools import read_files, respond, think
 
     return Agent(
         name="Local Agent",

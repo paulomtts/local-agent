@@ -6,47 +6,55 @@ from pygents import MemoryHook, hook
 
 from app.core.config import WORKING_MEMORY_TOKEN_THRESHOLD
 from app.core.logger import logger
-from app.memory.extractors.compact import compact_memory, token_count
-from app.memory.extractors.episodic import extract_episodic_memory
-from app.memory.extractors.semantic import extract_semantic_memory
-from app.memory.format import extract_message_content, is_user_message
+from app.memory.dataclasses import is_user_message
+from app.memory.extractors import (
+    compact_memory,
+    extract_episodic_memory,
+    extract_semantic_memory,
+    token_count,
+)
 
 WORKING_FILE = Path(__file__).resolve().parents[2] / ".memory" / "working.md"
 
 
 def _get_current_memory_items() -> list[Any]:
-    """Get the current items from working memory."""
     from app.core.factories import get_working_memory
 
     return get_working_memory().items
 
 
-def _is_user_message(items: list[Any]) -> bool:
-    if not items:
-        return False
-    return is_user_message(items[-1])
-
-
 def _extract_user_message(items: list[Any]) -> str:
-    _, content = extract_message_content(items[-1])
-    return content
+    if not items:
+        raise ValueError("Items list is empty")
+
+    last_item = items[-1]
+    if is_user_message(last_item):
+        return last_item.content
+    raise ValueError("Last item is not a user message")
 
 
 def _should_extract_memories(items: list[Any]) -> bool:
-    """Check if the latest user message warrants memory extraction."""
-    if not _is_user_message(items):
+    if not items or not is_user_message(items[-1]):
         return False
 
     msg = _extract_user_message(items)
 
-    # Skip trivial messages
     trivial_patterns = [
-        "thanks", "thank you", "ok", "okay", "yes", "no",
-        "sure", "got it", "understood", "bye", "hello", "hi"
+        "thanks",
+        "thank you",
+        "ok",
+        "okay",
+        "yes",
+        "no",
+        "sure",
+        "got it",
+        "understood",
+        "bye",
+        "hello",
+        "hi",
     ]
     msg_lower = msg.lower().strip()
 
-    # Exact match or very short
     if msg_lower in trivial_patterns or len(msg.split()) <= 2:
         return False
 
@@ -54,7 +62,6 @@ def _should_extract_memories(items: list[Any]) -> bool:
 
 
 def _build_tree(items: list[Any]) -> TreeExecutor | None:
-    has_user_message = _is_user_message(items)
     should_extract = _should_extract_memories(items)
     above_threshold = token_count(items) >= WORKING_MEMORY_TOKEN_THRESHOLD
 
@@ -91,7 +98,6 @@ def _build_tree(items: list[Any]) -> TreeExecutor | None:
 
 
 def _write_working_memory(items: list[Any]):
-    """Write the current working memory items to the working.md file."""
     content = "\n\n---\n\n".join(str(item) for item in items)
     with WORKING_FILE.open("w") as f:
         f.write(content)
@@ -112,7 +118,6 @@ async def after_append(items: list[Any]):
     except Exception as e:
         logger.error(f"[HOOK:after_append] Error during task execution: {e}")
 
-    # Get the current memory state (in case compaction happened)
     current_items = _get_current_memory_items()
     _write_working_memory(current_items)
     return current_items
