@@ -1,11 +1,14 @@
 """Memory query and accessor functions for extracting specific views of memory."""
 
+from pathlib import Path
+
 from app.memory.dataclasses import (
     is_assistant_response,
     is_user_message,
 )
 
 EPISODIC_TIMESTAMP_FORMAT = "%m-%d %H:%M"
+EPISODIC_FILE = Path(__file__).resolve().parents[2] / ".memory" / "episodic.md"
 
 
 def get_recent_context(memory, n: int = 3) -> str:
@@ -30,3 +33,13 @@ def get_conversation_pairs(memory, n: int = 3) -> str:
             pairs.insert(0, item)
         i -= 1
     return "\n".join(str(item) for item in pairs)
+
+
+def get_recent_episodic_events(n: int = 3) -> str:
+    """Get last N episodic events from episodic memory file."""
+    if not EPISODIC_FILE.exists():
+        return ""
+
+    lines = EPISODIC_FILE.read_text().strip().split("\n")
+    events = [line for line in lines if line.startswith("- ")][-n:]
+    return "\n".join(events) if events else ""

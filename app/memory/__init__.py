@@ -14,11 +14,13 @@ from .dataclasses import (
     is_tool_call,
     is_user_message,
 )
-from .hooks import after_append
+from .extractors.episodic import log_episodic_event
+from .hooks import after_append, load_working_memory
 from .queries import (
     EPISODIC_TIMESTAMP_FORMAT,
     get_conversation_pairs,
     get_recent_context,
+    get_recent_episodic_events,
     get_user_messages_only,
 )
 
@@ -37,8 +39,11 @@ __all__ = [
     "is_tool_call",
     "is_compaction",
     "get_recent_context",
+    "get_recent_episodic_events",
     "get_user_messages_only",
     "get_conversation_pairs",
     "EPISODIC_TIMESTAMP_FORMAT",
     "after_append",
+    "load_working_memory",
+    "log_episodic_event",
 ]

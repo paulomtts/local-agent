@@ -17,10 +17,18 @@ def get_working_memory() -> Memory:
         Memory: Working memory limited to 40 items. Items stored are MemoryItemType
             objects (UserMessage, AssistantResponse, ToolCall, or Compaction).
             Includes a hook to compact memory if it exceeds the token threshold.
+            On first initialization, loads previous conversation from working.md.
     """
-    from app.memory import after_append
+    from app.memory import after_append, load_working_memory
 
-    return Memory(limit=40, hooks=[after_append])
+    memory = Memory(limit=40, hooks=[after_append])
+
+    # Load previous conversation from working.md
+    items = load_working_memory()
+    if items:
+        memory.items.extend(items)
+
+    return memory
 
 
 @lru_cache

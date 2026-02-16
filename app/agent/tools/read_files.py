@@ -10,12 +10,13 @@ from app.agent.utils.file_search import (
     search_files_by_name,
 )
 from app.core.factories import get_toolkit
-from app.memory import ToolCall, get_user_messages_only
+from app.core.logger import log_prompt
+from app.memory import ToolCall, get_user_messages_only, log_episodic_event
 
-RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the context.
+RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the user's messages.
 
-# Context
-{{ context }}
+# Working Memory (User Messages)
+{{ user_messages }}
 """
 
 
@@ -37,12 +38,15 @@ async def get_file_contents(
     memory: Memory,
     toolkit: PyAIToolkit,
 ) -> str:
-    context = get_user_messages_only(memory, n=5)
+    user_messages = get_user_messages_only(memory, n=5)
+
     search = await toolkit.asend(
         response_model=GenerateRelevantKeywords,
         template=RELEVANT_KEYWORDS_PROMPT,
-        context=context,
+        user_messages=user_messages,
     )
+
+    log_prompt("read_files", search)
     keywords = [
         keyword.strip() for keyword in search.content.keywords if keyword.strip()
     ]
@@ -69,4 +73,27 @@ async def read_files(memory: Memory):
         toolkit=toolkit,
     )
     await memory.append(ToolCall(tool_name="read_files", result=file_contents))
+
+    # Deterministically log file reading event
+    if file_contents and "No relevant files found" not in file_contents:
+        # Extract file names from the result for context
+        lines = file_contents.split("\n")
+        file_mentions = [line for line in lines if line.startswith("# File:")]
+        file_count = len(file_mentions)
+
+        if file_count > 0:
+            # Get up to 3 file names for context
+            file_names = []
+            for mention in file_mentions[:3]:
+                # Extract filename from "# File: /path/to/file.py"
+                if ":" in mention:
+                    path = mention.split(":", 1)[1].strip()
+                    file_names.append(path.split("/")[-1])
+
+            context = ", ".join(file_names) if file_names else None
+            log_episodic_event(
+                event=f"agent read {file_count} file{'s' if file_count > 1 else ''}",
+                context=context,
+            )
+
     return Turn(think, args=[memory])

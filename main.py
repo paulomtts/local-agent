@@ -14,13 +14,16 @@ async def run_agent():
         message = input("\033[90mYou:\033[0m ")
         if message.lower() in ["exit", "quit"]:
             break
+
         await memory.append(UserMessage(content=message))
+
         first_turn = Turn(think, args=[memory])
         await agent.put(first_turn)
+
         async for _, output in agent.run():
             if isinstance(output, str):
                 print(output, end="", flush=True)
-        print()
+        print(end="\n")
 
 
 if __name__ == "__main__":

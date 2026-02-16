@@ -1,36 +1,50 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import logger
+from app.core.logger import RESET, TASK_TAG, log_prompt, logger
 from app.memory.queries import EPISODIC_TIMESTAMP_FORMAT
 
 EPISODIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "episodic.md"
 
-EPISODIC_PROMPT = """You are maintaining an episodic memory — a log of personal experiences tied to a specific moment in time. Episodic memory answers: "What happened, and in what context?"
+EPISODIC_PROMPT = """Extract user actions/intent from the user message. Agent actions are logged deterministically elsewhere.
 
-From the latest user message and conversation, extract interaction traces worth remembering: tasks attempted, problems encountered, decisions made, tools used and their outcomes, errors hit and how they were resolved, or any other concrete event from this session. Each entry should read like a brief diary note — grounded in what specifically happened, not abstract knowledge.
+# RULES
+**ATOMIC**: One action per event. Split compound interactions.
+**FACT-BASED**: Past tense, include who did what. No narrative fluff.
+  ❌ "User shared that they obtained items"
+  ✅ "user obtained Diablo IV unique items"
 
-Do NOT extract:
-- General facts, preferences, or definitions (those belong in semantic memory)
-- Anything that isn't tied to a concrete interaction or event
+**USER ONLY**: Only extract what the USER did/asked/provided.
+**MINIMAL**: Context only if essential.
+**NO DUPLICATES**: Skip routine confirmations, duplicates (below), or general facts (semantic memory).
 
-If nothing notable happened, return an empty list.
+If nothing notable, return empty list.
 
-# Conversation context
-{{ context }}
+# EXAMPLES
+"I got new Diablo items but they don't fit my build"
+→ event: "user obtained Diablo IV unique items" | context: "incompatible with build"
 
-# Latest user message
-{{ user_message }}
+"What were we talking about?"
+→ event: "user asked about prior conversation"
+
+---
+User: {{ user_message }}
 """
 
 
 class EpisodicEvent(BaseModel):
-    content: str = Field(description="A notable event, interaction, or outcome.")
+    event: str = Field(
+        description="The event in past tense. Include who did what. Examples: 'user asked about Nina', 'agent read 3 files', 'user obtained Diablo IV items'"
+    )
+
+    context: str | None = Field(
+        default=None,
+        description="Essential context or outcome (1 short phrase). Examples: 'poison build incompatible', 'found 5 sources'",
+    )
 
 
 class EpisodicExtraction(BaseModel):
@@ -39,29 +53,33 @@ class EpisodicExtraction(BaseModel):
     )
 
 
-def _format_context(items: list[Any], context_limit: int = 5) -> str:
-    recent_items = items[-context_limit:]
-    return "\n".join(str(item) for item in recent_items)
-
-
 async def _extract_events_from_llm(
-    context: str, user_message: str
+    user_message: str,
 ) -> list[EpisodicEvent]:
     config = LLMConfig()
     toolkit = PyAIToolkit(config)
     result = await toolkit.asend(
         response_model=EpisodicExtraction,
         template=EPISODIC_PROMPT,
-        context=context,
         user_message=user_message,
     )
+
+    log_prompt("episodic", result)
     return result.content.events
 
 
 def _format_episodic_entry(events: list[EpisodicEvent]) -> list[str]:
+    """Format events as structured markdown with timestamp."""
     timestamp = datetime.now().strftime(EPISODIC_TIMESTAMP_FORMAT)
     lines = [f"## {timestamp}", ""]
-    lines.extend(f"- {event.content}" for event in events)
+
+    for event in events:
+        if event.context:
+            line = f"- {event.event} | {event.context}"
+        else:
+            line = f"- {event.event}"
+        lines.append(line)
+
     lines.append("")
     return lines
 
@@ -71,26 +89,51 @@ def _write_episodic_events(lines: list[str]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
-async def extract_episodic_memory(items: list[Any], user_message: str):
-    """Extract and persist episodic events from conversation.
+def log_episodic_event(
+    event: str,
+    context: str | None = None,
+) -> None:
+    """Deterministically log an episodic event without LLM extraction.
 
-    Orchestrates the episodic memory extraction process:
-    1. Format recent conversation context
-    2. Extract events via LLM
-    3. Format events with timestamp
-    4. Write events to memory file
+    Use this for logging agent actions that are known deterministically
+    (tool executions, errors, outcomes) rather than requiring LLM interpretation.
 
     Args:
-        items: List of memory items from conversation
+        event: What happened in past tense, include who did what (e.g., "agent read 3 files")
+        context: Optional essential outcome/detail
+
+    Example:
+        log_episodic_event(
+            event="agent read 3 files",
+            context="config.py, main.py, utils.py"
+        )
+    """
+    episodic_event = EpisodicEvent(
+        event=event,
+        context=context,
+    )
+    lines = _format_episodic_entry([episodic_event])
+    _write_episodic_events(lines)
+
+
+async def extract_episodic_memory(user_message: str):
+    """Extract and persist user-side episodic events from conversation.
+
+    Extracts only user actions/intent using LLM. Agent actions are logged
+    deterministically by tools themselves using log_episodic_event().
+
+    Orchestrates the episodic memory extraction process:
+    1. Extract user events via LLM from user message
+    2. Format events with timestamp and type
+    3. Write events to memory file
+
+    Args:
         user_message: Latest user message that triggered extraction
     """
-    logger.debug("\033[93m[TASK:episodic_memory]\033[0m")
-    context = _format_context(items, context_limit=5)
-    events = await _extract_events_from_llm(context, user_message)
+    events = await _extract_events_from_llm(user_message)
     if not events:
-        logger.debug("[TASK:episodic_memory] No new events extracted, skipping.")
+        logger.debug(f"{TASK_TAG}[TASK:episodic_memory]{RESET} skip")
         return
-
     lines = _format_episodic_entry(events)
     _write_episodic_events(lines)
-    logger.debug(f"[TASK:episodic_memory] Appended {len(events)} events.")
+    logger.debug(f"{TASK_TAG}[TASK:episodic_memory]{RESET} +{len(events)} event")

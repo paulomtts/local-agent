@@ -1,4 +1,10 @@
-from logging import INFO, Formatter, StreamHandler, getLogger
+from logging import DEBUG, INFO, Formatter, StreamHandler, getLogger
+from typing import TYPE_CHECKING
+
+from app.core.config import ENVIRONMENT
+
+if TYPE_CHECKING:
+    from py_ai_toolkit.core.domain.interfaces import CompletionResponse
 
 LEVEL_COLORS = {
     "DEBUG": "\033[90m",
@@ -9,6 +15,9 @@ LEVEL_COLORS = {
 }
 
 RESET = "\033[0m"
+TASK_TAG = "\033[93m"
+HOOK_TAG = "\033[96m"
+PROMPT_TAG = "\033[38;5;117m"  # Light cyan/sky blue
 
 
 class ColoredFormatter(Formatter):
@@ -28,4 +37,19 @@ handler.setFormatter(
 
 logger = getLogger("local_agent")
 logger.setLevel(INFO)
+if ENVIRONMENT == "local":
+    logger.setLevel(DEBUG)
 logger.addHandler(handler)
+
+
+def log_prompt(prompt_name: str, response: "CompletionResponse") -> None:
+    """Log prompt token usage from CompletionResponse."""
+    from openai.types.chat import ChatCompletion, ChatCompletionChunk
+
+    completion = response.completion
+    if isinstance(completion, (ChatCompletion, ChatCompletionChunk)) and completion.usage:
+        usage = completion.usage
+        logger.debug(
+            f"{PROMPT_TAG}[PROMPT:{prompt_name}]{RESET} "
+            f"in={usage.prompt_tokens} out={usage.completion_tokens} total={usage.total_tokens}"
+        )
