@@ -1,10 +1,10 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
 from py_ai_toolkit import PyAIToolkit
-from pygents import Turn, Memory, ToolRegistry, tool
+from pydantic import BaseModel, Field
+from pygents import Memory, ToolRegistry, Turn, tool
 
-from app.factories import get_toolkit, logger
+from app.factories import get_toolkit
 from app.utils import get_tools_definitions
 
 
@@ -40,6 +40,6 @@ async def decide_next_tool(memory: Memory, toolkit: PyAIToolkit) -> str:
 async def think(memory: Memory):
     toolkit = get_toolkit()
     tool_name = await decide_next_tool(memory=memory, toolkit=toolkit)
-    logger.info(f"[Using tool: {tool_name}]")
+    print(f"\033[38;5;208m[TOOL:{tool_name}]\033[0m")
     target_tool = ToolRegistry.get(tool_name)
     return Turn(target_tool, args=[memory])

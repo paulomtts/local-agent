@@ -10,13 +10,13 @@ async def run_agent():
     agent = get_agent()
     memory = get_working_memory()
     while True:
-        message = input("You: ")
+        message = input("\033[90mYou:\033[0m ")
         if message.lower() in ["exit", "quit"]:
             break
         await memory.append(f"User message: {message}")
         first_turn = Turn(think, args=[memory])
         await agent.put(first_turn)
-        print("Agent: ", end="")
+        # print("\033[96mAgent:\033[0m ", end="")  # Cyan color
         async for _, output in agent.run():
             if isinstance(output, str):
                 print(output, end="", flush=True)

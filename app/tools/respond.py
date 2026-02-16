@@ -1,5 +1,6 @@
 from py_ai_toolkit import PyAIToolkit
 from pygents import Memory, tool
+
 from app.factories import get_toolkit
 
 
@@ -17,6 +18,8 @@ async def respond(memory: Memory):
     toolkit = get_toolkit()
     full_response = ""
     async for chunk in generate_assistant_response(memory=memory, toolkit=toolkit):
+        if not full_response:
+            yield "⤷ "
         full_response += chunk
         yield chunk
     await memory.append(f"Assistant response: {full_response}")

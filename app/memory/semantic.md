@@ -1,0 +1,7 @@
+- User's name is Paulo.
+- Paulo has a dog named Nina.
+- Nina's birthday is June 15.
+- Nina was born around 2010.
+- Nina is a small Pomeranian.
+- Nina has orange fur.
+- Nina likes eating treats.
