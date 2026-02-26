@@ -32,7 +32,7 @@ class ColoredFormatter(Formatter):
 handler = StreamHandler()
 handler.setFormatter(
     ColoredFormatter(
-        "\033[90m%(asctime)s\033[0m | %(levelname)s - %(message)s",
+        "\033[90m%(asctime)s\033[0m | \033[90m%(filename)s\033[0m\t| %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 )

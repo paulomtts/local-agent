@@ -1,12 +1,11 @@
 import sys
 from pathlib import Path
 
-from py_ai_toolkit import PyAIToolkit
 from pygents import ContextItem, ContextQueue, tool
 
 from app.agent.utils.definitions import get_tools_definitions
 from app.core.factories import get_toolkit
-from app.core.logger import log_token_usage
+from app.core.logger import log_token_usage, log_tool_use
 from app.memory import AssistantResponse, get_recent_episodic_events
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
@@ -28,7 +27,7 @@ RESPOND_PROMPT = """You are a helpful assistant. Use the background knowledge an
 Respond to the user's latest message."""
 
 
-async def generate_assistant_response(memory: ContextQueue, toolkit: PyAIToolkit):
+async def generate_assistant_response(memory: ContextQueue):
     conversation_pairs = "\n\n".join(str(item.content) for item in memory.items)
     tools = get_tools_definitions()
 
@@ -41,6 +40,8 @@ async def generate_assistant_response(memory: ContextQueue, toolkit: PyAIToolkit
     episodic_events = get_recent_episodic_events(n=5)
     if not episodic_events:
         episodic_events = "(none)"
+
+    toolkit = get_toolkit()
 
     last_chunk = None
     async for chunk in toolkit.stream(
@@ -61,9 +62,9 @@ async def generate_assistant_response(memory: ContextQueue, toolkit: PyAIToolkit
 
 @tool
 async def respond(memory: ContextQueue):
-    toolkit = get_toolkit()
+    log_tool_use("respond")
     full_response = ""
-    async for chunk in generate_assistant_response(memory=memory, toolkit=toolkit):
+    async for chunk in generate_assistant_response(memory=memory):
         if not full_response:
             yield "⤷ "
         full_response += chunk

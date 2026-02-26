@@ -1,5 +1,6 @@
 """Memory query and accessor functions for extracting specific views of memory."""
 
+import re
 from pathlib import Path
 
 from pygents import ContextQueue
@@ -53,7 +54,7 @@ def get_working_memory() -> list[MemoryItemType]:
         return []
 
     items: list[MemoryItemType] = []
-    for section in content.split("\n\n---\n\n"):
+    for section in re.split(r"\n(?=U: |A: |T\[|C: )", content):
         item = MemoryItem.parse(section)
         if item:
             items.append(item)

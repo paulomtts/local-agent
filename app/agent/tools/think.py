@@ -1,12 +1,11 @@
 from typing import Literal
 
-from py_ai_toolkit import PyAIToolkit
 from pydantic import BaseModel, Field
 from pygents import ContextQueue, ToolRegistry, Turn, tool
 
 from app.agent.utils.definitions import get_tools_definitions
 from app.core.factories import get_toolkit
-from app.core.logger import log_token_usage, logger
+from app.core.logger import log_token_usage
 from app.memory import (
     get_latest_tool_context,
     get_recent_context,
@@ -29,7 +28,7 @@ THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is
 - Consider both recent conversation and episodic memory when deciding
 - When talking about data from external resources, prioritize using tools to fetch the data rather than responding directly from what is available in the working memory
 
-# Tools
+# Tools & Subtools
 {{ tools }}
 
 # Working Memory (Recent Items)
@@ -43,7 +42,8 @@ THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is
 """
 
 
-async def decide_next_tool(memory: ContextQueue, toolkit: PyAIToolkit) -> ToolUse:
+async def decide_next_tool(memory: ContextQueue) -> ToolUse:
+    toolkit = get_toolkit()
     tools_definitions = get_tools_definitions()
     working_memory = get_recent_context(memory, n=3)
     episodic_events = get_recent_episodic_events(n=5)
@@ -66,9 +66,7 @@ async def decide_next_tool(memory: ContextQueue, toolkit: PyAIToolkit) -> ToolUs
 
 @tool
 async def think(memory: ContextQueue):
-    toolkit = get_toolkit()
-    tool_use = await decide_next_tool(memory=memory, toolkit=toolkit)
-    logger.debug(f"\033[38;5;208m[TOOL:{tool_use.name}]\033[0m")
+    tool_use = await decide_next_tool(memory=memory)
 
     if tool_use.name == "respond":
         from app.agent.tools.respond import respond

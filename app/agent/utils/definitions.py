@@ -15,6 +15,8 @@ def get_tools_definitions() -> str:
     for tool in ToolRegistry.all():
         definitions += f"{tool.metadata.name}: {tool.metadata.description}\n"
         if tool.metadata.name in SUBTOOLS:
-            for subtool_name, subtool_desc in SUBTOOLS[tool.metadata.name].items():
-                definitions += f"  - {subtool_name}: {subtool_desc}\n"
+            for index, (subtool_name, subtool_desc) in enumerate(
+                SUBTOOLS[tool.metadata.name].items()
+            ):
+                definitions += f"   {index + 1}. {subtool_name}: {subtool_desc}\n"
     return definitions

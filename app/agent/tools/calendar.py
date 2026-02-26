@@ -9,7 +9,7 @@ from app.agent.tools.think import think
 from app.core.factories import get_toolkit
 from app.core.logger import log_token_usage, log_tool_subtool_use
 from app.memory import ToolCall, get_recent_context, write_episodic_event
-from integrations.calendar import CalendarEvent, CalendarService
+from integrations.calendar_service import CalendarEvent, CalendarService
 
 ROUTE_PROMPT = """Based on the conversation, determine what the user wants to do with their calendar.
 

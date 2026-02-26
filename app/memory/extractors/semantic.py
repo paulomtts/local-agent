@@ -6,11 +6,11 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import log_task, log_token_usage, logger
+from app.core.logger import log_task, log_token_usage
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
-SEMANTIC_PROMPT = """Extract stable facts, preferences, relationships, or knowledge worth persisting across sessions.
+SEMANTIC_PROMPT = """From the user's latest message, extract stable facts, preferences, relationships, or knowledge worth persisting across sessions.
 
 Normalization rules:
 1. Remove temporal language ("recently", "yesterday"). State as timeless truth.
@@ -27,18 +27,11 @@ Normalization rules:
 Do NOT extract:
 - Events/interactions (episodic memory)
 - Session-specific information
-- Duplicates of existing memory below
 
 If nothing qualifies, return empty list.
 
-# Existing semantic memory
-{{ existing }}
-
 # Recent conversation
 {{ recent_conversation }}
-
-# Latest user message
-{{ user_message }}
 """
 
 
@@ -54,28 +47,18 @@ class SemanticExtraction(BaseModel):
     )
 
 
-def _read_existing_semantic_memory() -> str:
-    if SEMANTIC_FILE.exists():
-        return SEMANTIC_FILE.read_text().strip()
-    return ""
-
-
 def _format_context(items: list[Any], context_limit: int = 5) -> str:
     recent_items = items[-context_limit:]
     return "\n".join(str(item.content) for item in recent_items)
 
 
-async def _extract_facts_from_llm(
-    existing: str, recent_conversation: str, user_message: str
-) -> list[SemanticFact]:
+async def _extract_facts_from_llm(recent_conversation: str) -> list[SemanticFact]:
     config = LLMConfig()
     toolkit = PyAIToolkit(config)
     result = await toolkit.asend(
         response_model=SemanticExtraction,
         template=SEMANTIC_PROMPT,
-        existing=existing,
         recent_conversation=recent_conversation,
-        user_message=user_message,
         today=date.today().isoformat(),
     )
 
@@ -91,22 +74,20 @@ def _write_semantic_facts(facts: list[SemanticFact]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
-async def extract_semantic_memory(items: list[Any], user_message: str):
+async def extract_semantic_memory(items: list[Any]):
     """Extract and persist semantic facts from conversation.
 
     Orchestrates the semantic memory extraction process:
-    1. Read existing semantic memory
-    2. Format recent conversation context
-    3. Extract facts via LLM
-    4. Write new facts to memory file
+    1. Format recent conversation context
+    2. Extract facts via LLM
+    3. Write new facts to memory file
 
     Args:
         items: List of memory items from conversation
         user_message: Latest user message that triggered extraction
     """
-    existing = _read_existing_semantic_memory()
     recent_conversation = _format_context(items, context_limit=3)
-    facts = await _extract_facts_from_llm(existing, recent_conversation, user_message)
+    facts = await _extract_facts_from_llm(recent_conversation)
 
     if not facts:
         log_task("semantic_memory", "skip")

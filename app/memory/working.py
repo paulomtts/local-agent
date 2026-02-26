@@ -47,7 +47,7 @@ def _is_trivial_message(msg: str) -> bool:
 
 
 def write_working_memory(items: list[ContextItem[MemoryItem]], added: int) -> None:
-    content = "\n\n---\n\n".join(str(item.content) for item in items)
+    content = "\n".join(str(item.content) for item in items)
     with WORKING_FILE.open("w") as f:
         f.write(content)
     log_hook("after_append", "write", f"working +{added}")
@@ -93,7 +93,7 @@ def build_tree(
             Node[None](
                 coroutine=extract_semantic_memory,
                 uuid="semantic_memory",
-                kwargs={"items": items, "user_message": msg},
+                kwargs={"items": items},
             )
         )
         roots.append(

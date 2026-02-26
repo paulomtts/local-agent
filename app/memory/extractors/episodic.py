@@ -5,7 +5,7 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import log_task, log_token_usage, logger
+from app.core.logger import log_task, log_token_usage
 from app.memory.queries import EPISODIC_TIMESTAMP_FORMAT
 
 EPISODIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "episodic.md"
@@ -80,16 +80,15 @@ async def _extract_events_from_llm(
 def _format_episodic_entry(events: list[EpisodicEvent]) -> list[str]:
     """Format events as structured markdown with timestamp."""
     timestamp = datetime.now().strftime(EPISODIC_TIMESTAMP_FORMAT)
-    lines = [f"## {timestamp}", ""]
+    lines = []
 
     for event in events:
         if event.context:
-            line = f"- {event.event} | {event.context}"
+            line = f"[{timestamp}] {event.event} | {event.context}"
         else:
-            line = f"- {event.event}"
+            line = f"[{timestamp}] {event.event}"
         lines.append(line)
 
-    lines.append("")
     return lines
 
 
