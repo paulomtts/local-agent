@@ -6,7 +6,7 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import RESET, TASK_TAG, logger, log_prompt
+from app.core.logger import RESET, TASK_TAG, log_prompt, logger
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
@@ -62,7 +62,7 @@ def _read_existing_semantic_memory() -> str:
 
 def _format_context(items: list[Any], context_limit: int = 5) -> str:
     recent_items = items[-context_limit:]
-    return "\n".join(str(item) for item in recent_items)
+    return "\n".join(str(item.content) for item in recent_items)
 
 
 async def _extract_facts_from_llm(
@@ -80,6 +80,8 @@ async def _extract_facts_from_llm(
     )
 
     log_prompt("semantic", result)
+    if not isinstance(result.content, SemanticExtraction):
+        raise ValueError(f"Expected SemanticExtraction, got {type(result.content)}")
     return result.content.facts
 
 

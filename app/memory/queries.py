@@ -2,37 +2,25 @@
 
 from pathlib import Path
 
-from app.memory.dataclasses import (
-    is_assistant_response,
-    is_user_message,
-)
+from pygents import ContextQueue
+
+from app.core.logger import HOOK_TAG, RESET, logger
+from app.memory.dataclasses import MemoryItem, MemoryItemType
 
 EPISODIC_TIMESTAMP_FORMAT = "%m-%d %H:%M"
 EPISODIC_FILE = Path(__file__).resolve().parents[2] / ".memory" / "episodic.md"
+WORKING_FILE = Path(__file__).resolve().parents[2] / ".memory" / "working.md"
 
 
-def get_recent_context(memory, n: int = 3) -> str:
+def get_recent_context(memory: ContextQueue, n: int = 3) -> str:
     """Get last N items for recency-focused tasks."""
-    items = memory.items[-n:]
-    return "\n".join(str(item) for item in items)
+    return "\n".join(str(item.content) for item in memory.items[-n:])
 
 
-def get_user_messages_only(memory, n: int = 5) -> str:
+def get_user_messages_only(memory: ContextQueue, n: int = 5) -> str:
     """Extract only user messages for keyword generation."""
-    user_items = [item for item in memory.items if is_user_message(item)]
-    return "\n".join(str(item) for item in user_items[-n:])
-
-
-def get_conversation_pairs(memory, n: int = 3) -> str:
-    """Get last N user-assistant pairs for response generation."""
-    pairs = []
-    i = len(memory.items) - 1
-    while i >= 0 and len(pairs) < n * 2:
-        item = memory.items[i]
-        if is_user_message(item) or is_assistant_response(item):
-            pairs.insert(0, item)
-        i -= 1
-    return "\n".join(str(item) for item in pairs)
+    user_items = [item for item in memory.items if item.content.is_user_message()]
+    return "\n".join(str(item.content) for item in user_items[-n:])
 
 
 def get_recent_episodic_events(n: int = 3) -> str:
@@ -43,3 +31,26 @@ def get_recent_episodic_events(n: int = 3) -> str:
     lines = EPISODIC_FILE.read_text().strip().split("\n")
     events = [line for line in lines if line.startswith("- ")][-n:]
     return "\n".join(events) if events else ""
+
+
+def get_working_memory() -> list[MemoryItemType]:
+    """Load and parse working memory from working.md file."""
+    if not WORKING_FILE.exists():
+        logger.debug(
+            f"{HOOK_TAG}[HOOK:load_working]{RESET} file not found, starting fresh"
+        )
+        return []
+
+    content = WORKING_FILE.read_text().strip()
+    if not content:
+        logger.debug(f"{HOOK_TAG}[HOOK:load_working]{RESET} empty file, starting fresh")
+        return []
+
+    items: list[MemoryItemType] = []
+    for section in content.split("\n\n---\n\n"):
+        item = MemoryItem.parse(section)
+        if item:
+            items.append(item)
+
+    logger.debug(f"{HOOK_TAG}[HOOK:load_working]{RESET} loaded {len(items)} items")
+    return items

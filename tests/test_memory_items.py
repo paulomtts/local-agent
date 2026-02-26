@@ -5,13 +5,10 @@ from datetime import datetime
 from app.memory.dataclasses import (
     AssistantResponse,
     Compaction,
+    MemoryItem,
     MemoryItemType,
     ToolCall,
     UserMessage,
-    is_assistant_response,
-    is_compaction,
-    is_tool_call,
-    is_user_message,
 )
 
 
@@ -75,47 +72,47 @@ class TestMemoryItemCreation:
         assert comp.items_compacted == 3
 
 
-class TestTypeGuards:
-    """Test type guard functions for filtering."""
+class TestTypeChecks:
+    """Test is_* instance methods for type checking."""
 
     def test_is_user_message(self):
         user_msg = UserMessage(content="Test")
         asst_msg = AssistantResponse(content="Test")
         tool_msg = ToolCall(tool_name="tool", result="result")
 
-        assert is_user_message(user_msg) is True
-        assert is_user_message(asst_msg) is False
-        assert is_user_message(tool_msg) is False
+        assert user_msg.is_user_message() is True
+        assert asst_msg.is_user_message() is False
+        assert tool_msg.is_user_message() is False
 
     def test_is_assistant_response(self):
         user_msg = UserMessage(content="Test")
         asst_msg = AssistantResponse(content="Test")
         tool_msg = ToolCall(tool_name="tool", result="result")
 
-        assert is_assistant_response(asst_msg) is True
-        assert is_assistant_response(user_msg) is False
-        assert is_assistant_response(tool_msg) is False
+        assert asst_msg.is_assistant_response() is True
+        assert user_msg.is_assistant_response() is False
+        assert tool_msg.is_assistant_response() is False
 
     def test_is_tool_call(self):
         user_msg = UserMessage(content="Test")
         tool_msg = ToolCall(tool_name="tool", result="result")
         comp_msg = Compaction(summary="Summary")
 
-        assert is_tool_call(tool_msg) is True
-        assert is_tool_call(user_msg) is False
-        assert is_tool_call(comp_msg) is False
+        assert tool_msg.is_tool_call() is True
+        assert user_msg.is_tool_call() is False
+        assert comp_msg.is_tool_call() is False
 
     def test_is_compaction(self):
         comp_msg = Compaction(summary="Summary")
         user_msg = UserMessage(content="Test")
         tool_msg = ToolCall(tool_name="tool", result="result")
 
-        assert is_compaction(comp_msg) is True
-        assert is_compaction(user_msg) is False
-        assert is_compaction(tool_msg) is False
+        assert comp_msg.is_compaction() is True
+        assert user_msg.is_compaction() is False
+        assert tool_msg.is_compaction() is False
 
-    def test_type_guard_filtering(self):
-        """Test using type guards to filter a mixed list of items."""
+    def test_type_check_filtering(self):
+        """Test using is_* methods to filter a mixed list of items."""
         items: list[MemoryItemType] = [
             UserMessage(content="Hello"),
             AssistantResponse(content="Hi"),
@@ -124,23 +121,60 @@ class TestTypeGuards:
             Compaction(summary="Earlier context"),
         ]
 
-        user_msgs = [item for item in items if is_user_message(item)]
+        user_msgs = [item for item in items if item.is_user_message()]
         assert len(user_msgs) == 2
         assert all(isinstance(msg, UserMessage) for msg in user_msgs)
         assert user_msgs[0].content == "Hello"
         assert user_msgs[1].content == "How are you?"
 
-        asst_msgs = [item for item in items if is_assistant_response(item)]
+        asst_msgs = [item for item in items if item.is_assistant_response()]
         assert len(asst_msgs) == 1
         assert asst_msgs[0].content == "Hi"
 
-        tools = [item for item in items if is_tool_call(item)]
+        tools = [item for item in items if item.is_tool_call()]
         assert len(tools) == 1
         assert tools[0].tool_name == "think"
 
-        compactions = [item for item in items if is_compaction(item)]
+        compactions = [item for item in items if item.is_compaction()]
         assert len(compactions) == 1
         assert compactions[0].summary == "Earlier context"
+
+
+class TestParse:
+    """Test MemoryItem.parse classmethod."""
+
+    def test_parse_user_message(self):
+        item = MemoryItem.parse("U: Hello world")
+        assert isinstance(item, UserMessage)
+        assert item.content == "Hello world"
+
+    def test_parse_assistant_response(self):
+        item = MemoryItem.parse("A: Hi there")
+        assert isinstance(item, AssistantResponse)
+        assert item.content == "Hi there"
+
+    def test_parse_tool_call(self):
+        item = MemoryItem.parse("T[read_files]: some result")
+        assert isinstance(item, ToolCall)
+        assert item.tool_name == "read_files"
+        assert item.result == "some result"
+
+    def test_parse_compaction(self):
+        item = MemoryItem.parse("C: Summarized content")
+        assert isinstance(item, Compaction)
+        assert item.summary == "Summarized content"
+
+    def test_parse_empty_returns_none(self):
+        assert MemoryItem.parse("") is None
+        assert MemoryItem.parse("   ") is None
+
+    def test_parse_unknown_format_returns_none(self):
+        assert MemoryItem.parse("X: something") is None
+
+    def test_parse_strips_whitespace(self):
+        item = MemoryItem.parse("  U: Hello  ")
+        assert isinstance(item, UserMessage)
+        assert item.content == "Hello"
 
 
 class TestTimestamps:

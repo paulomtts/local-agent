@@ -1,14 +1,9 @@
-"""Dataclass-based memory item types.
-
-This module defines strongly-typed memory items using Python's built-in dataclasses.
-Each item type maintains the same string representation as the legacy format for
-LLM compatibility, but provides type safety and extensibility.
-"""
+"""Dataclass-based memory item types."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal, TypeGuard
+from typing import Literal
 
 
 @dataclass
@@ -18,11 +13,49 @@ class MemoryItem(ABC):
 
     @abstractmethod
     def to_display_string(self) -> str:
-        """Return format for LLM context."""
         pass
 
     def __str__(self) -> str:
         return self.to_display_string()
+
+    def is_user_message(self) -> bool:
+        return isinstance(self, UserMessage)
+
+    def is_assistant_response(self) -> bool:
+        return isinstance(self, AssistantResponse)
+
+    def is_tool_call(self) -> bool:
+        return isinstance(self, ToolCall)
+
+    def is_compaction(self) -> bool:
+        return isinstance(self, Compaction)
+
+    @classmethod
+    def parse(cls, section: str) -> "MemoryItemType | None":
+        """Parse a working.md section string into a typed memory item."""
+        section = section.strip()
+        if not section:
+            return None
+
+        if section.startswith("U: "):
+            return UserMessage(content=section[3:].strip())
+
+        if section.startswith("A: "):
+            return AssistantResponse(content=section[3:].strip())
+
+        if section.startswith("T["):
+            try:
+                end_bracket = section.index("]:")
+                tool_name = section[2:end_bracket]
+                result = section[end_bracket + 2 :].strip()
+                return ToolCall(tool_name=tool_name, result=result)
+            except ValueError:
+                return None
+
+        if section.startswith("C: "):
+            return Compaction(summary=section[3:].strip(), items_compacted=0)
+
+        return None
 
 
 @dataclass
@@ -69,23 +102,3 @@ class Compaction(MemoryItem):
 
 
 MemoryItemType = UserMessage | AssistantResponse | ToolCall | Compaction
-
-
-def is_user_message(item: MemoryItemType) -> TypeGuard[UserMessage]:
-    """Check if item is a user message."""
-    return isinstance(item, UserMessage)
-
-
-def is_assistant_response(item: MemoryItemType) -> TypeGuard[AssistantResponse]:
-    """Check if item is an assistant response."""
-    return isinstance(item, AssistantResponse)
-
-
-def is_tool_call(item: MemoryItemType) -> TypeGuard[ToolCall]:
-    """Check if item is a tool call."""
-    return isinstance(item, ToolCall)
-
-
-def is_compaction(item: MemoryItemType) -> TypeGuard[Compaction]:
-    """Check if item is a compaction."""
-    return isinstance(item, Compaction)

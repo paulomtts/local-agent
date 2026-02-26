@@ -1,11 +1,11 @@
 from pathlib import Path
 
 from py_ai_toolkit import PyAIToolkit
-from pygents import Memory, tool
+from pygents import ContextItem, ContextQueue, tool
 
 from app.core.factories import get_toolkit
 from app.core.logger import log_prompt
-from app.memory import AssistantResponse, get_conversation_pairs, get_recent_episodic_events
+from app.memory import AssistantResponse, get_recent_episodic_events
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
@@ -20,11 +20,16 @@ RESPOND_PROMPT = """You are a helpful assistant. Use the background knowledge an
 # Working Memory (Recent Conversation)
 {{ conversation_pairs }}
 
+# Tool Context (File Contents)
+{{ tool_context }}
+
 Respond to the user's latest message:"""
 
 
-async def generate_assistant_response(memory: Memory, toolkit: PyAIToolkit):
-    conversation_pairs = get_conversation_pairs(memory, n=3)
+async def generate_assistant_response(
+    memory: ContextQueue, toolkit: PyAIToolkit, tool_context: str | None = None
+):
+    conversation_pairs = "\n\n".join(str(item.content) for item in memory.items)
 
     semantic_facts = "(none)"
     if SEMANTIC_FILE.exists():
@@ -42,6 +47,7 @@ async def generate_assistant_response(memory: Memory, toolkit: PyAIToolkit):
         conversation_pairs=conversation_pairs,
         semantic_facts=semantic_facts,
         episodic_events=episodic_events,
+        tool_context=tool_context or "(none)",
     ):
         last_chunk = chunk
         yield chunk.content
@@ -52,13 +58,15 @@ async def generate_assistant_response(memory: Memory, toolkit: PyAIToolkit):
 
 
 @tool
-async def respond(memory: Memory):
+async def respond(memory: ContextQueue, tool_context: str | None = None):
     "Use to respond to the user's message."
     toolkit = get_toolkit()
     full_response = ""
-    async for chunk in generate_assistant_response(memory=memory, toolkit=toolkit):
+    async for chunk in generate_assistant_response(
+        memory=memory, toolkit=toolkit, tool_context=tool_context
+    ):
         if not full_response:
             yield "⤷ "
         full_response += chunk
         yield chunk
-    await memory.append(AssistantResponse(content=full_response))
+    await memory.append(ContextItem(AssistantResponse(content=full_response)))

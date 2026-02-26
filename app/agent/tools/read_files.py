@@ -1,6 +1,6 @@
 from py_ai_toolkit import PyAIToolkit
 from pydantic import BaseModel, Field
-from pygents import Memory, Turn, tool
+from pygents import ContextQueue, Turn, tool
 
 from app.agent.tools.think import think
 from app.agent.utils.file_search import (
@@ -11,7 +11,7 @@ from app.agent.utils.file_search import (
 )
 from app.core.factories import get_toolkit
 from app.core.logger import log_prompt
-from app.memory import ToolCall, get_user_messages_only, log_episodic_event
+from app.memory import get_user_messages_only, log_episodic_event
 
 RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the user's messages.
 
@@ -35,7 +35,7 @@ class GenerateRelevantKeywords(BaseModel):
 
 
 async def get_file_contents(
-    memory: Memory,
+    memory: ContextQueue,
     toolkit: PyAIToolkit,
 ) -> str:
     user_messages = get_user_messages_only(memory, n=5)
@@ -65,14 +65,13 @@ async def get_file_contents(
 
 
 @tool()
-async def read_files(memory: Memory):
+async def read_files(memory: ContextQueue):
     "Use to find and read relevant files."
     toolkit = get_toolkit()
     file_contents = await get_file_contents(
         memory=memory,
         toolkit=toolkit,
     )
-    await memory.append(ToolCall(tool_name="read_files", result=file_contents))
 
     # Deterministically log file reading event
     if file_contents and "No relevant files found" not in file_contents:
@@ -96,4 +95,4 @@ async def read_files(memory: Memory):
                 context=context,
             )
 
-    return Turn(think, args=[memory])
+    return Turn(think, args=[memory], kwargs={"tool_context": file_contents})
