@@ -1,6 +1,6 @@
 """Memory extraction tasks."""
 
-from .compact import compact_memory
+from app.memory.compact import compact_memory
 from .episodic import extract_episodic_memory
 from .semantic import extract_semantic_memory
 

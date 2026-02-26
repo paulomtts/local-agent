@@ -31,10 +31,10 @@ async def get_working_memory() -> ContextQueue:
 
 @lru_cache
 async def get_agent():
-    from app.agent.tools import read_files, respond, think
+    from app.agent.tools import calendar, read_files, respond, think
 
     return Agent(
         name="Local Agent",
         description="A helpful assistant with access to tools.",
-        tools=[read_files, respond, think],
+        tools=[calendar, read_files, respond, think],
     )

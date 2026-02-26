@@ -6,7 +6,7 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import RESET, TASK_TAG, log_prompt, logger
+from app.core.logger import RESET, TASK_TAG, log_token_usage, logger
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
@@ -79,7 +79,7 @@ async def _extract_facts_from_llm(
         today=date.today().isoformat(),
     )
 
-    log_prompt("semantic", result)
+    log_token_usage("semantic", result)
     if not isinstance(result.content, SemanticExtraction):
         raise ValueError(f"Expected SemanticExtraction, got {type(result.content)}")
     return result.content.facts

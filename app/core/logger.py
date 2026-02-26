@@ -14,10 +14,12 @@ LEVEL_COLORS = {
     "CRITICAL": "\033[95m",
 }
 
-RESET = "\033[0m"
-TASK_TAG = "\033[93m"
-HOOK_TAG = "\033[96m"
+RESET = "\033[0m"  # Reset color
+TASK_TAG = "\033[93m"  # Yellow
+HOOK_TAG = "\033[96m"  # Dark cyan
 PROMPT_TAG = "\033[38;5;117m"  # Light cyan/sky blue
+TOOL_TAG = "\033[38;5;208m"  # Dark orange
+SUBTOOL_TAG = "\033[38;5;215m"  # Light orange
 
 
 class ColoredFormatter(Formatter):
@@ -42,12 +44,30 @@ if ENVIRONMENT == "local":
 logger.addHandler(handler)
 
 
-def log_prompt(prompt_name: str, response: "CompletionResponse") -> None:
+def log_hook(hook_name: str, action: str, detail: str = "") -> None:
+    msg = f"{HOOK_TAG}[HOOK:{hook_name}:{action}]{RESET}"
+    if detail:
+        msg += f" {detail}"
+    logger.debug(msg)
+
+
+def log_tool_use(tool_name: str) -> None:
+    logger.debug(f"{TOOL_TAG}[TOOL:{tool_name}]{RESET}")
+
+
+def log_tool_subtool_use(tool_name: str, subtool_name: str) -> None:
+    logger.debug(f"{TOOL_TAG}[TOOL:{tool_name}:{subtool_name}]{RESET}")
+
+
+def log_token_usage(prompt_name: str, response: "CompletionResponse") -> None:
     """Log prompt token usage from CompletionResponse."""
     from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
     completion = response.completion
-    if isinstance(completion, (ChatCompletion, ChatCompletionChunk)) and completion.usage:
+    if (
+        isinstance(completion, (ChatCompletion, ChatCompletionChunk))
+        and completion.usage
+    ):
         usage = completion.usage
         logger.debug(
             f"{PROMPT_TAG}[PROMPT:{prompt_name}]{RESET} "

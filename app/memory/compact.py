@@ -3,7 +3,7 @@ from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pygents import ContextItem, ContextQueue
 
 from app.core.factories import get_working_memory
-from app.core.logger import RESET, TASK_TAG, log_prompt, logger
+from app.core.logger import RESET, TASK_TAG, log_token_usage, logger
 from app.memory.dataclasses import Compaction
 
 COMPACT_PROMPT = """Summarize the following conversation items into a single consolidated summary. Preserve all information that is relevant for the assistant to continue helping the user (recent intents, file contents or paths mentioned, decisions, tool outcomes). Omit only redundant or purely decorative detail. Output the summary only, no preamble.
@@ -40,7 +40,7 @@ async def compact_memory(items: list[ContextItem]):
         old_items=old_items_text,
     )
 
-    log_prompt("compact", output)
+    log_token_usage("compact", output)
 
     memory: ContextQueue = await get_working_memory()
     compacted = Compaction(summary=output.content, items_compacted=len(old_items))

@@ -5,7 +5,7 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import RESET, TASK_TAG, log_prompt, logger
+from app.core.logger import RESET, TOOL_TAG, log_token_usage, logger
 from app.memory.queries import EPISODIC_TIMESTAMP_FORMAT
 
 EPISODIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "episodic.md"
@@ -71,7 +71,7 @@ async def _extract_events_from_llm(
         user_message=user_message,
     )
 
-    log_prompt("episodic", result)
+    log_token_usage("episodic", result)
     if not isinstance(result.content, EpisodicExtraction):
         raise ValueError(f"Expected EpisodicExtraction, got {type(result.content)}")
     return result.content.events
@@ -98,7 +98,7 @@ def _write_episodic_events(lines: list[str]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
-def log_episodic_event(
+def write_episodic_event(
     event: str,
     context: str | None = None,
 ) -> None:
@@ -141,8 +141,8 @@ async def extract_episodic_memory(user_message: str):
     """
     events = await _extract_events_from_llm(user_message)
     if not events:
-        logger.debug(f"{TASK_TAG}[TASK:episodic_memory]{RESET} skip")
+        logger.debug(f"{TOOL_TAG}[TASK:episodic_memory]{RESET} skip")
         return
     lines = _format_episodic_entry(events)
     _write_episodic_events(lines)
-    logger.debug(f"{TASK_TAG}[TASK:episodic_memory]{RESET} +{len(events)} event")
+    logger.debug(f"{TOOL_TAG}[TASK:episodic_memory]{RESET} +{len(events)} event")

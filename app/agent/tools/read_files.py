@@ -1,6 +1,6 @@
 from py_ai_toolkit import PyAIToolkit
 from pydantic import BaseModel, Field
-from pygents import ContextQueue, Turn, tool
+from pygents import ContextItem, ContextQueue, Turn, tool
 
 from app.agent.tools.think import think
 from app.agent.utils.file_search import (
@@ -10,8 +10,8 @@ from app.agent.utils.file_search import (
     search_files_by_name,
 )
 from app.core.factories import get_toolkit
-from app.core.logger import log_prompt
-from app.memory import get_user_messages_only, log_episodic_event
+from app.core.logger import log_token_usage
+from app.memory import ToolCall, get_user_messages_only, write_episodic_event
 
 RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the user's messages.
 
@@ -46,7 +46,7 @@ async def get_file_contents(
         user_messages=user_messages,
     )
 
-    log_prompt("read_files", search)
+    log_token_usage("read_files", search)
     keywords = [
         keyword.strip() for keyword in search.content.keywords if keyword.strip()
     ]
@@ -90,9 +90,12 @@ async def read_files(memory: ContextQueue):
                     file_names.append(path.split("/")[-1])
 
             context = ", ".join(file_names) if file_names else None
-            log_episodic_event(
+            write_episodic_event(
                 event=f"agent read {file_count} file{'s' if file_count > 1 else ''}",
                 context=context,
             )
 
-    return Turn(think, args=[memory], kwargs={"tool_context": file_contents})
+    await memory.append(
+        ContextItem(ToolCall(tool_name="read_files", result=file_contents))
+    )
+    return Turn(think, args=[memory])

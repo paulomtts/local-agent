@@ -1,8 +1,8 @@
 """Utilities for agent operations."""
 
+from .definitions import get_tools_definitions
 from .file_search import (
     deduplicate_paths,
-    get_tools_definitions,
     read_file_contents,
     search_files_by_content,
     search_files_by_name,

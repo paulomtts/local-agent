@@ -5,6 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+CALENDAR_FILE = Path(__file__).resolve().parents[1] / ".memory" / "calendar.md"
+
 
 class CalendarEvent(BaseModel):
     """Response model for calendar event creation."""
@@ -21,13 +23,13 @@ class CalendarEvent(BaseModel):
 class CalendarService:
     """Mock calendar service for creating events."""
 
-    def __init__(self, events_file: str = "calendar_events.txt"):
+    def __init__(self):
         """Initialize calendar service.
 
         Args:
-            events_file: Path to the events file in root directory
+            calendar_file: Path to the calendar file in root directory
         """
-        self.events_file = Path(events_file)
+        self.calendar_file = CALENDAR_FILE
 
     def create_event(self, event: CalendarEvent) -> None:
         """Write calendar event to file.
@@ -35,5 +37,15 @@ class CalendarService:
         Args:
             event: CalendarEvent instance to write
         """
-        with open(self.events_file, "a") as f:
+        with open(self.calendar_file, "a") as f:
             f.write(event.model_dump_json() + "\n")
+
+    def read_events(self) -> list[CalendarEvent]:
+        """Read all calendar events from file, sorted by start time."""
+        if not self.calendar_file.exists():
+            return []
+        events = []
+        for line in self.calendar_file.read_text().splitlines():
+            if line.strip():
+                events.append(CalendarEvent.model_validate_json(line))
+        return sorted(events, key=lambda e: e.start_time)

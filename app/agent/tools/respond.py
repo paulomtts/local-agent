@@ -3,13 +3,17 @@ from pathlib import Path
 from py_ai_toolkit import PyAIToolkit
 from pygents import ContextItem, ContextQueue, tool
 
+from app.agent.utils.definitions import get_tools_definitions
 from app.core.factories import get_toolkit
-from app.core.logger import log_prompt
+from app.core.logger import log_token_usage
 from app.memory import AssistantResponse, get_recent_episodic_events
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
 RESPOND_PROMPT = """You are a helpful assistant. Use the background knowledge and episodic memory when relevant, and respond naturally to the user's latest message based on the recent conversation.
+
+# Available Tools
+{{ tools }}
 
 # Semantic Memory (Background Facts)
 {{ semantic_facts }}
@@ -20,16 +24,12 @@ RESPOND_PROMPT = """You are a helpful assistant. Use the background knowledge an
 # Working Memory (Recent Conversation)
 {{ conversation_pairs }}
 
-# Tool Context (File Contents)
-{{ tool_context }}
-
 Respond to the user's latest message:"""
 
 
-async def generate_assistant_response(
-    memory: ContextQueue, toolkit: PyAIToolkit, tool_context: str | None = None
-):
+async def generate_assistant_response(memory: ContextQueue, toolkit: PyAIToolkit):
     conversation_pairs = "\n\n".join(str(item.content) for item in memory.items)
+    tools = get_tools_definitions()
 
     semantic_facts = "(none)"
     if SEMANTIC_FILE.exists():
@@ -45,26 +45,24 @@ async def generate_assistant_response(
     async for chunk in toolkit.stream(
         template=RESPOND_PROMPT,
         conversation_pairs=conversation_pairs,
+        tools=tools,
         semantic_facts=semantic_facts,
         episodic_events=episodic_events,
-        tool_context=tool_context or "(none)",
     ):
         last_chunk = chunk
         yield chunk.content
 
-    # Log token usage from final chunk
     if last_chunk:
-        log_prompt("respond", last_chunk)
+        log_token_usage(
+            "respond", last_chunk
+        )  # TODO: should improve to allow list of chunks
 
 
 @tool
-async def respond(memory: ContextQueue, tool_context: str | None = None):
-    "Use to respond to the user's message."
+async def respond(memory: ContextQueue):
     toolkit = get_toolkit()
     full_response = ""
-    async for chunk in generate_assistant_response(
-        memory=memory, toolkit=toolkit, tool_context=tool_context
-    ):
+    async for chunk in generate_assistant_response(memory=memory, toolkit=toolkit):
         if not full_response:
             yield "⤷ "
         full_response += chunk

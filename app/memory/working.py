@@ -3,10 +3,10 @@ from grafo import Node, TreeExecutor
 from pygents import ContextItem
 
 from app.core.config import WORKING_MEMORY_TOKEN_THRESHOLD
-from app.core.logger import HOOK_TAG, RESET, logger
+from app.core.logger import log_hook
+from app.memory.compact import compact_memory
 from app.memory.dataclasses import MemoryItem, UserMessage
 from app.memory.extractors import (
-    compact_memory,
     extract_episodic_memory,
     extract_semantic_memory,
 )
@@ -50,7 +50,7 @@ def write_working_memory(items: list[ContextItem[MemoryItem]], added: int):
     content = "\n\n---\n\n".join(str(item.content) for item in items)
     with WORKING_FILE.open("w") as f:
         f.write(content)
-    logger.debug(f"{HOOK_TAG}[HOOK:after_append:working]{RESET} +{added} item")
+    log_hook("after_append", "write", f"working +{added}")
 
 
 def _appended_contains_user_message(appended_items: list[ContextItem]) -> bool:
@@ -69,9 +69,9 @@ def build_tree(
         return None
     message_is_trivial = _is_trivial_message(msg)
     above_threshold = _token_count(items) >= WORKING_MEMORY_TOKEN_THRESHOLD
-    run_extraction = (appended_items is not None and _appended_contains_user_message(appended_items)) or (
-        appended_items is None
-    )
+    run_extraction = (
+        appended_items is not None and _appended_contains_user_message(appended_items)
+    ) or (appended_items is None)
 
     if message_is_trivial and not above_threshold and not run_extraction:
         return None

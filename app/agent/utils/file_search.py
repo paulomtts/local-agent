@@ -1,7 +1,5 @@
 from pathlib import Path
 
-from pygents import ToolRegistry
-
 
 EXCLUSION_DIRS = [
     ".venv",
@@ -11,13 +9,6 @@ EXCLUSION_DIRS = [
     ".cursor",
     ".vscode",
 ]
-
-
-def get_tools_definitions() -> str:
-    definitions = ""
-    for tool in ToolRegistry.all():
-        definitions += f"{tool.metadata.name}: {tool.metadata.description}\n"
-    return definitions
 
 
 def search_files_by_name(
