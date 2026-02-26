@@ -20,11 +20,16 @@ async def get_working_memory() -> ContextQueue:
             On first initialization, loads previous conversation from working.md.
     """
     from app.memory import get_working_memory
+    from app.memory.hooks import LOADING_WORKING_MEMORY
 
     memory = ContextQueue(limit=40)
     items = get_working_memory()
     if items:
-        await memory.append(*[ContextItem(item) for item in items])
+        token = LOADING_WORKING_MEMORY.set(True)
+        try:
+            await memory.append(*[ContextItem(item) for item in items])
+        finally:
+            LOADING_WORKING_MEMORY.reset(token)
 
     return memory
 

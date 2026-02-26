@@ -6,7 +6,7 @@ from py_ai_toolkit import PyAIToolkit
 from py_ai_toolkit.core.domain.interfaces import LLMConfig
 from pydantic import BaseModel, Field
 
-from app.core.logger import RESET, TASK_TAG, log_token_usage, logger
+from app.core.logger import log_task, log_token_usage, logger
 
 SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
@@ -109,8 +109,8 @@ async def extract_semantic_memory(items: list[Any], user_message: str):
     facts = await _extract_facts_from_llm(existing, recent_conversation, user_message)
 
     if not facts:
-        logger.debug(f"{TASK_TAG}[TASK:semantic_memory]{RESET} skip")
+        log_task("semantic_memory", "skip")
         return
 
     _write_semantic_facts(facts)
-    logger.debug(f"{TASK_TAG}[TASK:semantic_memory]{RESET} +{len(facts)} facts")
+    log_task("semantic_memory", f"+{len(facts)} facts")

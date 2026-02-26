@@ -51,6 +51,13 @@ def log_hook(hook_name: str, action: str, detail: str = "") -> None:
     logger.debug(msg)
 
 
+def log_task(task_name: str, detail: str = "") -> None:
+    msg = f"{TASK_TAG}[TASK:{task_name}]{RESET}"
+    if detail:
+        msg += f" {detail}"
+    logger.debug(msg)
+
+
 def log_tool_use(tool_name: str) -> None:
     logger.debug(f"{TOOL_TAG}[TOOL:{tool_name}]{RESET}")
 

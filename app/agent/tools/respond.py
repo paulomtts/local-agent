@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from py_ai_toolkit import PyAIToolkit
@@ -24,7 +25,7 @@ RESPOND_PROMPT = """You are a helpful assistant. Use the background knowledge an
 # Working Memory (Recent Conversation)
 {{ conversation_pairs }}
 
-Respond to the user's latest message:"""
+Respond to the user's latest message."""
 
 
 async def generate_assistant_response(memory: ContextQueue, toolkit: PyAIToolkit):
@@ -67,4 +68,5 @@ async def respond(memory: ContextQueue):
             yield "⤷ "
         full_response += chunk
         yield chunk
+    sys.stdout.write("\n")
     await memory.append(ContextItem(AssistantResponse(content=full_response)))

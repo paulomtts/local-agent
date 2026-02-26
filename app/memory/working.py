@@ -46,7 +46,7 @@ def _is_trivial_message(msg: str) -> bool:
     return msg.lower().strip() in trivial_patterns or len(msg.split()) <= 2
 
 
-def write_working_memory(items: list[ContextItem[MemoryItem]], added: int):
+def write_working_memory(items: list[ContextItem[MemoryItem]], added: int) -> None:
     content = "\n\n---\n\n".join(str(item.content) for item in items)
     with WORKING_FILE.open("w") as f:
         f.write(content)
@@ -63,6 +63,7 @@ def _appended_contains_user_message(appended_items: list[ContextItem]) -> bool:
 def build_tree(
     items: list[ContextItem[MemoryItem]],
     appended_items: list[ContextItem] | None = None,
+    queue=None,
 ) -> TreeExecutor | None:
     msg = _latest_user_message(items)
     if msg is None:
@@ -78,10 +79,12 @@ def build_tree(
 
     roots: list[Node] = []
 
-    if above_threshold:
+    if above_threshold and queue is not None:
         roots.append(
             Node[None](
-                coroutine=compact_memory, uuid="compact_memory", kwargs={"items": items}
+                coroutine=compact_memory,
+                uuid="compact_memory",
+                kwargs={"memory": queue, "items": items},
             )
         )
 
