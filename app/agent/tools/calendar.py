@@ -72,16 +72,14 @@ async def read():
 
     item_id = f"cal_read_{uuid.uuid4().hex[:8]}"
     description = (
-        "Calendar events. "
-        "Schema: List[dict] — event_id (str), title (str), "
-        "start_time (ISO 8601 str), end_time (ISO 8601 str), description (str)"
-    ) if structured else "No calendar events found."
-
-    tool_call = ToolCall(
-        tool_name="calendar.read",
-        result=f"[pool:{item_id}] {description}"
+        (
+            "Calendar events. "
+            "Schema: List[dict] — event_id (str), title (str), "
+            "start_time (ISO 8601 str), end_time (ISO 8601 str), description (str)"
+        )
+        if structured
+        else "No calendar events found."
     )
-    yield ContextItem[ToolCall](tool_call)
     yield ContextItem[list](content=structured, description=description, id=item_id)
     yield Turn(think)
 
@@ -133,10 +131,8 @@ async def create(memory: ContextQueue):
     description = (
         f"Created '{draft.title}' at {draft.start_time.strftime('%Y-%m-%d %H:%M')}"
     )
-    confirmation = f"Event created: {draft.title} ({draft.start_time.strftime('%Y-%m-%d %H:%M')} → {draft.end_time.strftime('%H:%M')})"
     tool_call = ToolCall(
         tool_name="calendar.create", result=f"[pool:{item_id}] {description}"
     )
     yield ContextItem[ToolCall](tool_call)
-    yield ContextItem[str](content=confirmation, description=description, id=item_id)
     yield Turn(think)

@@ -60,12 +60,20 @@ async def decide_next_tool(memory: ContextQueue, pool: ContextPool) -> ToolUse:
     log_token_usage("think", result)
     if not isinstance(result.content, ToolUse):
         raise ValueError("Expected ToolUse, got %s" % type(result.content))
+    chosen_context_descriptions = [
+        pool.get(id).description for id in result.content.context_ids
+    ]
+    detail = f"{result.content.name}"
+    if result.content.subtool:
+        detail += f".{result.content.subtool}"
+    if chosen_context_descriptions:
+        detail += f" (context: {', '.join(desc for desc in chosen_context_descriptions if desc)})"
+    log_tool_use("think", None, detail)
     return result.content
 
 
 @tool
 async def think(memory: ContextQueue, pool: ContextPool):
-    log_tool_use("think")
     choice = await decide_next_tool(memory=memory, pool=pool)
     tool = ToolRegistry.get(choice.name)
     kwargs: dict[str, Any] = dict(context_ids=choice.context_ids)

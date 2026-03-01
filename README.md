@@ -1,3 +1,5 @@
+:warning: This is highly dependent on LLM model choice. At 01/03/2026, gpt-5-mini with 'low' reasoning effort was a good choice. :warning:
+
 # Memory System Architecture
 
 ```mermaid

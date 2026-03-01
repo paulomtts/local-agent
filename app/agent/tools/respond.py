@@ -28,8 +28,9 @@ RESPOND_PROMPT = """You are a helpful assistant. Use the background knowledge an
 # Fetched Context (Tool Outputs)
 {{ pool_context }}
 
-
-Respond to the user's latest message."""
+Rules:
+- Respond to the user's latest message in humanized prose.
+- If provided with JSON data, format it into a humanized prose response."""
 
 
 @tool

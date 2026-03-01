@@ -19,8 +19,8 @@ TASK_TAG = "\033[93m"  # Yellow
 HOOK_TAG = "\033[96m"  # Dark cyan
 PROMPT_TAG = "\033[38;5;117m"  # Light cyan/sky blue
 TOOL_TAG = "\033[38;5;208m"  # Dark orange
-SUBTOOL_TAG = "\033[38;5;215m"  # Light orange
-ORCHESTRATION_TAG = "\033[38;5;220m"  # Light purple
+CONTEXT_TAG = "\033[90m"  # Light gray
+ORCHESTRATION_TAG = "\033[38;5;220m"  # Gold
 
 
 class ColoredFormatter(Formatter):
@@ -63,8 +63,17 @@ def log_task(task_name: str, detail: str = "") -> None:
     logger.debug(msg)
 
 
-def log_tool_use(tool_name: str) -> None:
-    logger.debug(f"{TOOL_TAG}[TOOL:{tool_name}]{RESET}")
+def log_tool_use(
+    tool_name: str, subtool_name: str | None = None, detail: str = ""
+) -> None:
+    msg = f"{TOOL_TAG}[TOOL:{tool_name}"
+    if subtool_name:
+        msg += f".{subtool_name}"
+    msg += f"]{RESET}"
+    if detail:
+        msg += f"\n\t\t\t      {CONTEXT_TAG}⤷ {detail}{RESET}"
+
+    logger.debug(msg)
 
 
 def log_tool_subtool_use(tool_name: str, subtool_name: str) -> None:

@@ -113,12 +113,12 @@ def _write_working_memory(items: list[ContextItem[MemoryItem]], added: int) -> N
 
 @hook(ContextQueueHook.AFTER_APPEND)
 async def after_append(
-    _queue, _appended_items: list[ContextItem], current: list[ContextItem]
-):
+    queue, appended_items: list[ContextItem], current: list[ContextItem]
+):  # TODO: pygents shouldn't need to pass queue here, because it can be injected manually if needed
     if LOADING_WORKING_MEMORY.get():
         return
 
-    tree = _build_tree(current, appended_items=_appended_items, queue=_queue)
+    tree = _build_tree(current, appended_items=appended_items, queue=queue)
     if tree is None:
         _write_working_memory(current, added=1)
         return
@@ -128,4 +128,4 @@ async def after_append(
     except Exception as e:
         log_hook("after_append", "error", str(e))
 
-    _write_working_memory(list(_queue.items), added=1)
+    _write_working_memory(list(queue.items), added=1)
