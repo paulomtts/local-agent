@@ -72,47 +72,10 @@ class TestMemoryItemCreation:
         assert comp.items_compacted == 3
 
 
-class TestTypeChecks:
-    """Test is_* instance methods for type checking."""
+class TestTypeCheckFiltering:
+    """Test filtering mixed lists by type with isinstance."""
 
-    def test_is_user_message(self):
-        user_msg = UserMessage(content="Test")
-        asst_msg = AssistantResponse(content="Test")
-        tool_msg = ToolCall(tool_name="tool", result="result")
-
-        assert user_msg.is_user_message() is True
-        assert asst_msg.is_user_message() is False
-        assert tool_msg.is_user_message() is False
-
-    def test_is_assistant_response(self):
-        user_msg = UserMessage(content="Test")
-        asst_msg = AssistantResponse(content="Test")
-        tool_msg = ToolCall(tool_name="tool", result="result")
-
-        assert asst_msg.is_assistant_response() is True
-        assert user_msg.is_assistant_response() is False
-        assert tool_msg.is_assistant_response() is False
-
-    def test_is_tool_call(self):
-        user_msg = UserMessage(content="Test")
-        tool_msg = ToolCall(tool_name="tool", result="result")
-        comp_msg = Compaction(summary="Summary")
-
-        assert tool_msg.is_tool_call() is True
-        assert user_msg.is_tool_call() is False
-        assert comp_msg.is_tool_call() is False
-
-    def test_is_compaction(self):
-        comp_msg = Compaction(summary="Summary")
-        user_msg = UserMessage(content="Test")
-        tool_msg = ToolCall(tool_name="tool", result="result")
-
-        assert comp_msg.is_compaction() is True
-        assert user_msg.is_compaction() is False
-        assert tool_msg.is_compaction() is False
-
-    def test_type_check_filtering(self):
-        """Test using is_* methods to filter a mixed list of items."""
+    def test_filter_by_type(self):
         items: list[MemoryItemType] = [
             UserMessage(content="Hello"),
             AssistantResponse(content="Hi"),
@@ -121,21 +84,20 @@ class TestTypeChecks:
             Compaction(summary="Earlier context"),
         ]
 
-        user_msgs = [item for item in items if item.is_user_message()]
+        user_msgs = [item for item in items if isinstance(item, UserMessage)]
         assert len(user_msgs) == 2
-        assert all(isinstance(msg, UserMessage) for msg in user_msgs)
         assert user_msgs[0].content == "Hello"
         assert user_msgs[1].content == "How are you?"
 
-        asst_msgs = [item for item in items if item.is_assistant_response()]
+        asst_msgs = [item for item in items if isinstance(item, AssistantResponse)]
         assert len(asst_msgs) == 1
         assert asst_msgs[0].content == "Hi"
 
-        tools = [item for item in items if item.is_tool_call()]
+        tools = [item for item in items if isinstance(item, ToolCall)]
         assert len(tools) == 1
         assert tools[0].tool_name == "think"
 
-        compactions = [item for item in items if item.is_compaction()]
+        compactions = [item for item in items if isinstance(item, Compaction)]
         assert len(compactions) == 1
         assert compactions[0].summary == "Earlier context"
 

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.core.logger import log_task, log_token_usage
 
-SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
+SEMANTIC_FILE = Path(__file__).resolve().parents[2] / ".memory" / "semantic.md"
 
 SEMANTIC_PROMPT = """From the user's latest message, extract stable facts, preferences, relationships, or knowledge worth persisting across sessions.
 
@@ -64,7 +64,9 @@ def _read_current_semantic_memory(line_limit: int = 100) -> str:
     return "\n".join(recent_lines) if recent_lines else "(none yet)"
 
 
-async def _extract_facts_from_llm(recent_conversation: str, current_semantic_memory: str) -> list[SemanticFact]:
+async def _extract_facts_from_llm(
+    recent_conversation: str, current_semantic_memory: str
+) -> list[SemanticFact]:
     config = LLMConfig()
     toolkit = PyAIToolkit(config)
     result = await toolkit.asend(
@@ -104,7 +106,6 @@ async def extract_semantic_memory(items: list[Any]):
     facts = await _extract_facts_from_llm(recent_conversation, current_semantic_memory)
 
     if not facts:
-        log_task("semantic_memory", "skip")
         return
 
     _write_semantic_facts(facts)

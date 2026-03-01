@@ -21,11 +21,13 @@ async def compact_memory(memory: ContextQueue, items: list[ContextItem]):
     KEEP_RECENT = 5
 
     if len(items) <= KEEP_RECENT:
-        log_task("compact_memory", "skip")
         return
 
     old_items = items[:-KEEP_RECENT]
     recent_items = items[-KEEP_RECENT:]
+    if len(old_items) == KEEP_RECENT:
+        old_items = items
+        recent_items = []
 
     log_task("compact_memory", f"{len(old_items)}→{len(recent_items)} items")
 

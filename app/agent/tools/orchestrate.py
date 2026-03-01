@@ -1,40 +1,51 @@
-import inspect
+import builtins
 import json
-import re
+import math
+from datetime import datetime
+from typing import Annotated, Union
 
-from pydantic import BaseModel, Field
-from pygents import ContextItem, ContextQueue, Turn, tool
+from pydantic import BaseModel, Discriminator, Field, Tag
+from pygents import ContextItem, ContextPool, ContextQueue, Turn, tool
 
 from app.agent.tools.calendar import create, read
+from app.agent.tools.think import think
 from app.core.factories import get_toolkit
 from app.core.logger import log_orchestration_pipeline, log_token_usage, log_tool_use
 from app.memory import (
     ToolCall,
+    get_episodic_events,
     get_recent_context,
-    get_recent_episodic_events,
-    write_episodic_event,
 )
+from app.memory.episodic import write_episodic_event
 
 TOOL_SCHEMAS = {
     "calendar": {
-        "description": "Read or create calendar events.",
-        "kwargs": {"action": {"required": True, "values": ["read", "create"]}},
-        "output": "String: formatted event list (read) or confirmation/question (create).",
+        "description": "Read calendar events.",
+        "kwargs": {"action": {"required": False, "default": "read"}},
+        "output_schema": "List[dict] — event_id (str), title (str), start_time (ISO 8601 str), end_time (ISO 8601 str), description (str)",
     },
     "read_files": {
         "description": "Search codebase for relevant files and return their contents.",
         "kwargs": {},
-        "output": "String: file paths and contents.",
+        "output_schema": "str — file paths and contents.",
     },
 }
 
 ORCHESTRATE_PROMPT = """You are orchestrating a multi-step task by calling tools in sequence.
 
-Rules:
-- Output plain Python only: async def pipeline(tools): then the body. No markdown, no ```.
-- Call tools: result = await tools['name'](kwarg=value)
-- No imports. No other functions. No return needed.
-- Do NOT call: respond, think, orchestrate — not in tools dict.
+Output a Pipeline with a list of steps. Each step is one of:
+
+**ToolStep** — call a tool:
+  - name: tool name (from Available Tools)
+  - kwargs: dict of keyword arguments
+  - store_as: variable name for the result
+
+**TransformStep** — pure Python logic between tool calls:
+  - code: multi-line Python. Reads from ctx variables. Must assign to store_as.
+  - store_as: variable name the code assigns to
+
+Available imports in transform code: json, math, datetime.
+Do NOT call tools or access memory inside transform code.
 
 # Available Tools
 {{ tool_schemas }}
@@ -47,126 +58,115 @@ Rules:
 """
 
 
-class OrchestrateCode(BaseModel):
+class ToolStep(BaseModel):
+    """Call a tool and store its result."""
+
+    name: str = Field(description="Tool name.")
+    kwargs: dict = Field(default_factory=dict, description="Keyword arguments.")
+    store_as: str = Field(description="Variable name to store the result in.")
+
+
+class TransformStep(BaseModel):
+    """Run Python code to transform data between tool calls."""
+
+    code: str = Field(
+        description="Multi-line Python. Must assign result to store_as variable."
+    )
+    store_as: str = Field(description="Variable the code must assign to.")
+
+
+def _discriminate_step(v) -> str:
+    if isinstance(v, dict):
+        return "transform" if "code" in v else "tool"
+    return "transform" if isinstance(v, TransformStep) else "tool"
+
+
+PipelineStep = Annotated[
+    Union[Annotated[ToolStep, Tag("tool")], Annotated[TransformStep, Tag("transform")]],
+    Discriminator(_discriminate_step),
+]
+
+
+class Pipeline(BaseModel):
     reasoning: str = Field(
         description="Step-by-step plan: which tools, in what order, why."
     )
-    code: str = Field(
-        description=(
-            "Plain Python only: async def pipeline(tools): body. "
-            "Call tools as: result = await tools['name'](kwarg=value). "
-            "No markdown, no code fences, no trailing text or explanation."
-        )
-    )
+    steps: list[PipelineStep]
 
 
-def _extract_pipeline_code(raw: str) -> str:
-    raw = raw.strip()
-    match = re.search(r"```(?:python)?\s*\n(.*?)```", raw, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return raw
+SAFE_NS = {
+    "__builtins__": builtins,
+    "json": json,
+    "math": math,
+    "datetime": datetime,
+}
 
 
-def _make_tools(memory: ContextQueue) -> dict:
-    def _last_result(before: int) -> str:
-        new = memory.items[before:]
-        for item in reversed(new):
-            if isinstance(item.content, ToolCall):
-                return item.content.result
-        return ""
+async def _run_pipeline(steps: list, tools: dict) -> None:
+    ctx: dict = {}
+    for step in steps:
+        if isinstance(step, ToolStep):
+            ctx[step.store_as] = await tools[step.name](**step.kwargs)
+        elif isinstance(step, TransformStep):
+            exec(step.code, {**SAFE_NS, **ctx, "ctx": ctx}, ctx)
 
-    async def _calendar_wrapper(action: str = "read") -> str:
-        before = len(memory.items)
-        if action == "read":
-            await read()
-            return _last_result(before)
-        elif action == "create":
-            await create()
-            new_result = _last_result(before)
-            if new_result:
-                return new_result  # not-ready: question was appended
-            # success: _create appended nothing — synthesize confirmation
-            await memory.append(
-                ContextItem(
-                    ToolCall(tool_name="calendar", result="Calendar event created.")
-                )
-            )
-            return "Calendar event created."
-        raise ValueError(f"Unknown calendar action: {action!r}")
 
-    async def _read_files_wrapper() -> str:
+def _make_tools(memory: ContextQueue, pool: ContextPool) -> dict:
+    async def _calendar_wrapper(action: str = "read"):
+        subtool = read if action == "read" else create
+        data_item = None
+        async for item in subtool():
+            if isinstance(item, ContextItem) and item.id and item.description:
+                await pool.add(item)
+                data_item = item
+        return data_item.content if data_item else None
+
+    async def _read_files_wrapper():
         from app.agent.tools.read_files import get_file_contents
 
         toolkit = get_toolkit()
         contents = await get_file_contents(memory=memory, toolkit=toolkit)
-        await memory.append(
-            ContextItem(ToolCall(tool_name="read_files", result=contents))
-        )
         return contents
 
     return {"calendar": _calendar_wrapper, "read_files": _read_files_wrapper}
 
 
-async def _run_generated_code(code: str, tools: dict) -> None:
-    ns: dict = {}
-    exec(compile(code, "<orchestrate>", "exec"), ns)
-    pipeline_fn = ns.get("pipeline")
-    if pipeline_fn is None or not callable(pipeline_fn):
-        raise ValueError("Generated code must define async def pipeline(tools).")
-    if not inspect.iscoroutinefunction(pipeline_fn):
-        raise ValueError("pipeline must be async.")
-    await pipeline_fn(tools)
-
-
 @tool
-async def orchestrate(memory: ContextQueue):
+async def orchestrate(memory: ContextQueue, pool: ContextPool):
     "Use for multi-step tasks that require calling multiple tools in sequence."
     log_tool_use("orchestrate")
 
     toolkit = get_toolkit()
-    working_memory = get_recent_context(memory, n=5)
-    episodic_events = get_recent_episodic_events(n=5) or "(No episodic events yet)"
-    tool_schemas = json.dumps(TOOL_SCHEMAS, indent=2)
-
     result = await toolkit.asend(
-        response_model=OrchestrateCode,
+        response_model=Pipeline,
         template=ORCHESTRATE_PROMPT,
-        tool_schemas=tool_schemas,
-        working_memory=working_memory,
-        episodic_events=episodic_events,
+        tool_schemas=TOOL_SCHEMAS,
+        working_memory=get_recent_context(memory, n=5),
+        episodic_events=get_episodic_events(n=5) or "(No episodic events yet)",
     )
-
     log_token_usage("orchestrate", result)
-    plan = result.content
-    if not isinstance(plan, OrchestrateCode):
-        raise ValueError("Expected OrchestrateCode, got %s" % type(plan))
 
-    tools = _make_tools(memory)
+    if not isinstance(result.content, Pipeline):
+        raise ValueError("Expected Pipeline, got %s" % type(result.content))
+
+    pipeline = result.content
 
     try:
-        code = _extract_pipeline_code(plan.code)
-        log_orchestration_pipeline(code)
-        await _run_generated_code(code, tools)
+        tools = _make_tools(memory, pool)
+        log_orchestration_pipeline(pipeline.model_dump_json(indent=2))
+        await _run_pipeline(pipeline.steps, tools)
     except Exception as exc:
-        await memory.append(
-            ContextItem(
-                ToolCall(
-                    tool_name="orchestrate",
-                    result=f"Orchestration failed: {exc}",
-                    success=False,
-                )
-            )
+        tool_call = ToolCall(
+            tool_name="orchestrate",
+            result=f"Orchestration failed: {exc}",
+            success=False,
         )
+        yield ContextItem(tool_call)
+        yield Turn(think)
         write_episodic_event("orchestration pipeline failed", context=str(exc))
-        from app.agent.tools.respond import respond
-
-        return Turn(respond)
+        return
 
     write_episodic_event(
-        "agent executed orchestration pipeline", context=plan.reasoning[:120]
+        "agent executed orchestration pipeline", context=pipeline.reasoning[:120]
     )
-
-    from app.agent.tools.respond import respond
-
-    return Turn(respond)
+    yield Turn(think)

@@ -3,6 +3,8 @@ from functools import lru_cache
 from py_ai_toolkit import PyAIToolkit
 from pygents import Agent, ContextItem, ContextQueue
 
+from app.core.logger import log_hook
+
 
 @lru_cache
 def get_toolkit():
@@ -28,8 +30,11 @@ async def get_working_memory() -> ContextQueue:
         token = LOADING_WORKING_MEMORY.set(True)
         try:
             await memory.append(*[ContextItem(item) for item in items])
+            log_hook("working", "load", f"{len(items)} items")
         finally:
             LOADING_WORKING_MEMORY.reset(token)
+    else:
+        log_hook("working", "load", "fresh")
 
     return memory
 
