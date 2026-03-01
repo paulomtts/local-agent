@@ -14,7 +14,7 @@ from app.memory import (
 
 
 class ToolUse(BaseModel):
-    name: Literal["read_files", "respond", "calendar"] = Field(
+    name: Literal["read_files", "respond", "calendar", "orchestrate"] = Field(
         description="The tool to be used."
     )
     subtool: str | None = Field(

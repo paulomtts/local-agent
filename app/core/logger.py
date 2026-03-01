@@ -20,6 +20,7 @@ HOOK_TAG = "\033[96m"  # Dark cyan
 PROMPT_TAG = "\033[38;5;117m"  # Light cyan/sky blue
 TOOL_TAG = "\033[38;5;208m"  # Dark orange
 SUBTOOL_TAG = "\033[38;5;215m"  # Light orange
+ORCHESTRATION_TAG = "\033[38;5;220m"  # Light purple
 
 
 class ColoredFormatter(Formatter):
@@ -32,7 +33,7 @@ class ColoredFormatter(Formatter):
 handler = StreamHandler()
 handler.setFormatter(
     ColoredFormatter(
-        "\033[90m%(asctime)s\033[0m | \033[90m%(filename)s\033[0m\t| %(levelname)s - %(message)s",
+        "\033[90m%(asctime)s\033[0m | %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 )
@@ -63,7 +64,7 @@ def log_tool_use(tool_name: str) -> None:
 
 
 def log_tool_subtool_use(tool_name: str, subtool_name: str) -> None:
-    logger.debug(f"{TOOL_TAG}[TOOL:{tool_name}:{subtool_name}]{RESET}")
+    logger.debug(f"{TOOL_TAG}[TOOL:{tool_name}.{subtool_name}]{RESET}")
 
 
 def log_token_usage(prompt_name: str, response: "CompletionResponse") -> None:
@@ -80,3 +81,7 @@ def log_token_usage(prompt_name: str, response: "CompletionResponse") -> None:
             f"{PROMPT_TAG}[PROMPT:{prompt_name}]{RESET} "
             f"in={usage.prompt_tokens} out={usage.completion_tokens} total={usage.total_tokens}"
         )
+
+
+def log_orchestration_pipeline(pipeline: str) -> None:
+    logger.debug(f"{ORCHESTRATION_TAG}[ORCHESTRATION:\n{pipeline}\n]{RESET}")

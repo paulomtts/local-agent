@@ -47,6 +47,10 @@ async def get_file_contents(
     )
 
     log_token_usage("read_files", search)
+    if not isinstance(search.content, GenerateRelevantKeywords):
+        raise ValueError(
+            "Expected GenerateRelevantKeywords, got %s" % type(search.content)
+        )
     keywords = [
         keyword.strip() for keyword in search.content.keywords if keyword.strip()
     ]

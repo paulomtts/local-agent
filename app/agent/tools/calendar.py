@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, Field
 from pygents import ContextItem, ContextQueue, Turn, tool
@@ -11,11 +10,16 @@ from app.core.logger import log_token_usage, log_tool_subtool_use
 from app.memory import ToolCall, get_recent_context, write_episodic_event
 from integrations.calendar_service import CalendarEvent, CalendarService
 
-ROUTE_PROMPT = """Based on the conversation, determine what the user wants to do with their calendar.
 
-# Working Memory (Recent Conversation)
-{{ working_memory }}
-"""
+@tool
+async def calendar(action: str | None = None):
+    "Use to read or create calendar events."
+    if action is None or action == "read":
+        return await read()
+    if action == "create":
+        return await create()
+    raise ValueError(f"Unknown calendar action: {action!r}")
+
 
 CREATE_EVENT_PROMPT = """Extract calendar event details from the conversation. Today is {{ today }} and the timezone is {{ timezone }}.
 Resolve relative dates (e.g. "tomorrow", "next Monday") to absolute ISO 8601 datetimes.
@@ -30,12 +34,6 @@ If any required field is missing or ambiguous, set ready=False and write a speci
 for the user that includes a concrete suggestion. Ask about one missing field at a time.
 
 If all required fields are present, set ready=True and populate all fields."""
-
-
-class CalendarAction(BaseModel):
-    action: Literal["read", "create"] = Field(
-        description="'read' to list events, 'create' to add a new event."
-    )
 
 
 class EventDraft(BaseModel):
@@ -74,7 +72,8 @@ def _format_events(service: CalendarService) -> str:
     return "\n".join(lines)
 
 
-async def _read(memory: ContextQueue):
+@calendar.subtool
+async def read(memory: ContextQueue):
     formatted = _format_events(CalendarService())
     await memory.append(ContextItem(ToolCall(tool_name="calendar", result=formatted)))
     log_tool_subtool_use("calendar", "read")
@@ -82,7 +81,8 @@ async def _read(memory: ContextQueue):
     return Turn(think)
 
 
-async def _create(memory: ContextQueue):
+@calendar.subtool
+async def create(memory: ContextQueue):
     toolkit = get_toolkit()
     working_memory = get_recent_context(memory, n=5)
 
@@ -121,31 +121,3 @@ async def _create(memory: ContextQueue):
     )
 
     return Turn(respond)
-
-
-@tool
-async def calendar(memory: ContextQueue, action: str | None = None):
-    "Use to read or create calendar events."
-    if action == "read":
-        return await _read(memory)
-    if action == "create":
-        return await _create(memory)
-
-    # Fallback: route via LLM when think didn't specify a subtool
-    toolkit = get_toolkit()
-    working_memory = get_recent_context(memory, n=3)
-
-    result = await toolkit.asend(
-        response_model=CalendarAction,
-        template=ROUTE_PROMPT,
-        working_memory=working_memory,
-    )
-
-    log_token_usage("calendar", result)
-    routed = result.content
-    if not isinstance(routed, CalendarAction):
-        raise ValueError("Expected CalendarAction, got %s" % type(routed))
-
-    if routed.action == "read":
-        return await _read(memory)
-    return await _create(memory)

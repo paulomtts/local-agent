@@ -12,6 +12,9 @@ SEMANTIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "semantic.md"
 
 SEMANTIC_PROMPT = """From the user's latest message, extract stable facts, preferences, relationships, or knowledge worth persisting across sessions.
 
+**Existing semantic memory (do not duplicate):**
+{{ current_semantic_memory }}
+
 Normalization rules:
 1. Remove temporal language ("recently", "yesterday"). State as timeless truth.
    ❌ "User recently bought Nina a bed"
@@ -27,8 +30,9 @@ Normalization rules:
 Do NOT extract:
 - Events/interactions (episodic memory)
 - Session-specific information
+- Facts already covered (literally or in meaning) in the existing semantic memory above
 
-If nothing qualifies, return empty list.
+If nothing new qualifies, return empty list.
 
 # Recent conversation
 {{ recent_conversation }}
@@ -52,13 +56,22 @@ def _format_context(items: list[Any], context_limit: int = 5) -> str:
     return "\n".join(str(item.content) for item in recent_items)
 
 
-async def _extract_facts_from_llm(recent_conversation: str) -> list[SemanticFact]:
+def _read_current_semantic_memory(line_limit: int = 100) -> str:
+    if not SEMANTIC_FILE.exists():
+        return "(none yet)"
+    lines = SEMANTIC_FILE.read_text().strip().splitlines()
+    recent_lines = lines[-line_limit:] if len(lines) > line_limit else lines
+    return "\n".join(recent_lines) if recent_lines else "(none yet)"
+
+
+async def _extract_facts_from_llm(recent_conversation: str, current_semantic_memory: str) -> list[SemanticFact]:
     config = LLMConfig()
     toolkit = PyAIToolkit(config)
     result = await toolkit.asend(
         response_model=SemanticExtraction,
         template=SEMANTIC_PROMPT,
         recent_conversation=recent_conversation,
+        current_semantic_memory=current_semantic_memory,
         today=date.today().isoformat(),
     )
 
@@ -87,7 +100,8 @@ async def extract_semantic_memory(items: list[Any]):
         user_message: Latest user message that triggered extraction
     """
     recent_conversation = _format_context(items, context_limit=3)
-    facts = await _extract_facts_from_llm(recent_conversation)
+    current_semantic_memory = _read_current_semantic_memory()
+    facts = await _extract_facts_from_llm(recent_conversation, current_semantic_memory)
 
     if not facts:
         log_task("semantic_memory", "skip")
