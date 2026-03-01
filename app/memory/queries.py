@@ -1,5 +1,6 @@
 """Memory query and accessor functions for extracting specific views of memory."""
 
+import json
 import re
 from pathlib import Path
 
@@ -80,6 +81,10 @@ def get_pool_context(pool: ContextPool, context_ids: list[str]) -> str:
     pool_context = "(none)"
     item = [pool.get(cid) for cid in context_ids]
     if item:
-        pool_context = "\n\n".join(item.content for item in item if item.description)
+        pool_context = "\n\n".join(
+            item.content if isinstance(item.content, str) else json.dumps(item.content)
+            for item in item
+            if item.description
+        )
 
     return pool_context

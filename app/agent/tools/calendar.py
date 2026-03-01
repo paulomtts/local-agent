@@ -66,21 +66,23 @@ class EventDraft(BaseModel):
 @calendar.subtool
 async def read():
     "Read calendar events."
-    formatted = CalendarService.format_events()
     log_tool_subtool_use("calendar", "read")
-
-    events = [line for line in formatted.split("\n") if line.startswith("- [")]
-    if not events:
-        description = "No calendar events found."
-    else:
-        description = f"Calendar: {len(events)} event(s) found."
+    events = CalendarService.read_events()
+    structured = [e.model_dump(mode="json") for e in events]
 
     item_id = f"cal_read_{uuid.uuid4().hex[:8]}"
+    description = (
+        "Calendar events. "
+        "Schema: List[dict] — event_id (str), title (str), "
+        "start_time (ISO 8601 str), end_time (ISO 8601 str), description (str)"
+    ) if structured else "No calendar events found."
+
     tool_call = ToolCall(
-        tool_name="calendar.read", result=f"[pool:{item_id}] {description}"
+        tool_name="calendar.read",
+        result=f"[pool:{item_id}] {description}"
     )
     yield ContextItem[ToolCall](tool_call)
-    yield ContextItem[str](content=formatted, description=description, id=item_id)
+    yield ContextItem[list](content=structured, description=description, id=item_id)
     yield Turn(think)
 
 
