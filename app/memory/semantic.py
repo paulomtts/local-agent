@@ -56,12 +56,11 @@ def _format_context(items: list[Any], context_limit: int = 5) -> str:
     return "\n".join(str(item.content) for item in recent_items)
 
 
-def _read_current_semantic_memory(line_limit: int = 100) -> str:
+def _read_current_semantic_memory() -> str:
     if not SEMANTIC_FILE.exists():
         return "(none yet)"
-    lines = SEMANTIC_FILE.read_text().strip().splitlines()
-    recent_lines = lines[-line_limit:] if len(lines) > line_limit else lines
-    return "\n".join(recent_lines) if recent_lines else "(none yet)"
+    content = SEMANTIC_FILE.read_text().strip()
+    return content if content else "(none yet)"
 
 
 async def _extract_facts_from_llm(

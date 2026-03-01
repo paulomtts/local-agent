@@ -64,13 +64,13 @@ class EventDraft(BaseModel):
 
 
 @calendar.subtool
-async def read():
+async def read(store_as: str | None = None):
     "Read calendar events."
     log_tool_subtool_use("calendar", "read")
     events = CalendarService.read_events()
     structured = [e.model_dump(mode="json") for e in events]
 
-    item_id = f"cal_read_{uuid.uuid4().hex[:8]}"
+    item_id = store_as or f"cal_read_{uuid.uuid4().hex[:8]}"
     description = (
         (
             "Calendar events. "
