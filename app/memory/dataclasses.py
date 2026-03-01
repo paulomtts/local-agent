@@ -18,18 +18,6 @@ class MemoryItem(ABC):
     def __str__(self) -> str:
         return self.to_display_string()
 
-    def is_user_message(self) -> bool:
-        return isinstance(self, UserMessage)
-
-    def is_assistant_response(self) -> bool:
-        return isinstance(self, AssistantResponse)
-
-    def is_tool_call(self) -> bool:
-        return isinstance(self, ToolCall)
-
-    def is_compaction(self) -> bool:
-        return isinstance(self, Compaction)
-
     @classmethod
     def parse(cls, section: str) -> "MemoryItemType | None":
         """Parse a working.md section string into a typed memory item."""

@@ -10,14 +10,16 @@ from .dataclasses import (
     ToolCall,
     UserMessage,
 )
-from .extractors.episodic import write_episodic_event
+from .episodic import write_episodic_event
 from .hooks import after_append
 from .queries import (
     EPISODIC_TIMESTAMP_FORMAT,
-    get_latest_tool_context,
+    get_episodic_events,
+    get_latest_tool_output,
+    get_pool_context,
     get_recent_context,
-    get_recent_episodic_events,
-    get_user_messages_only,
+    get_semantic_facts,
+    get_user_messages,
     get_working_memory,
 )
 
@@ -31,10 +33,12 @@ __all__ = [
     "AssistantResponse",
     "ToolCall",
     "Compaction",
-    "get_latest_tool_context",
+    "get_latest_tool_output",
     "get_recent_context",
-    "get_recent_episodic_events",
-    "get_user_messages_only",
+    "get_semantic_facts",
+    "get_episodic_events",
+    "get_user_messages",
+    "get_pool_context",
     "EPISODIC_TIMESTAMP_FORMAT",
     "after_append",
     "get_working_memory",

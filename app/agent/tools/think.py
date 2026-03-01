@@ -1,15 +1,12 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-from pygents import ContextQueue, ToolRegistry, Turn, tool
+from pygents import ContextPool, ContextQueue, ToolRegistry, Turn, tool
 
-from app.agent.utils.definitions import get_tools_definitions
 from app.core.factories import get_toolkit
-from app.core.logger import log_token_usage
+from app.core.logger import log_token_usage, log_tool_use
 from app.memory import (
-    get_latest_tool_context,
-    get_recent_context,
-    get_recent_episodic_events,
+    get_episodic_events,
 )
 
 
@@ -21,15 +18,20 @@ class ToolUse(BaseModel):
         default=None,
         description="For tools with subtools, specify the subtool to skip internal routing. E.g. 'create' or 'read' for calendar.",
     )
+    context_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "IDs of pool items to pass to the next tool. Use for 'respond' so it can include that data in the reply. "
+            "Leave empty when calling a tool that fetches data (e.g. calendar read); those tools do not use context_ids."
+        ),
+    )
 
 
 THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is to support the user by using one of the tools at your disposal. Rules:
-- If you don't need external resources, use 'respond' to answer directly
-- Consider both recent conversation and episodic memory when deciding
-- When talking about data from external resources, prioritize using tools to fetch the data rather than responding directly from what is available in the working memory
+- If you don't need external resources, choose 'respond' to answer directly.
+- If a fetch tool (e.g. calendar read, read_files) has already been called and the Context Pool below lists its result(s), choose 'respond' and pass the relevant pool IDs in context_ids so the reply can use that data. Do not call the same read/fetch tool again.
+- Only call a fetch tool when the pool does not yet contain the needed data.
 
-# Tools & Subtools
-{{ tools }}
 
 # Working Memory (Recent Items)
 {{ working_memory }}
@@ -37,27 +39,24 @@ THINK_PROMPT = """You are a helpful assistant with access to tools. Your goal is
 # Episodic Memory (Recent Events)
 {{ episodic_events }}
 
-# Tool Context (Last Tool Result)
-{{ tool_context_status }}
+# Tools & Subtools
+{{ tools }}
+
+# Context Pool (Available Data)
+{{ pool_catalogue }}
 """
 
 
-async def decide_next_tool(memory: ContextQueue) -> ToolUse:
+async def decide_next_tool(memory: ContextQueue, pool: ContextPool) -> ToolUse:
     toolkit = get_toolkit()
-    tools_definitions = get_tools_definitions()
-    working_memory = get_recent_context(memory, n=3)
-    episodic_events = get_recent_episodic_events(n=5)
-    tool_context_status = get_latest_tool_context(memory)
-
     result = await toolkit.asend(
         response_model=ToolUse,
         template=THINK_PROMPT,
-        tools=tools_definitions,
-        working_memory=working_memory,
-        episodic_events=episodic_events or "(No episodic events yet)",
-        tool_context_status=tool_context_status,
+        tools=ToolRegistry.definitions(),
+        pool_catalogue=pool.catalogue() or "(no data in pool)",
+        working_memory=memory.history(),
+        episodic_events=get_episodic_events(n=5) or "(No episodic events yet)",
     )
-
     log_token_usage("think", result)
     if not isinstance(result.content, ToolUse):
         raise ValueError("Expected ToolUse, got %s" % type(result.content))
@@ -65,15 +64,11 @@ async def decide_next_tool(memory: ContextQueue) -> ToolUse:
 
 
 @tool
-async def think(memory: ContextQueue):
-    tool_use = await decide_next_tool(memory=memory)
-
-    if tool_use.name == "respond":
-        from app.agent.tools.respond import respond
-
-        return Turn(respond)
-
-    target_tool = ToolRegistry.get(tool_use.name)
-    if tool_use.subtool:
-        return Turn(target_tool, kwargs={"action": tool_use.subtool})
-    return Turn(target_tool)
+async def think(memory: ContextQueue, pool: ContextPool):
+    log_tool_use("think")
+    choice = await decide_next_tool(memory=memory, pool=pool)
+    tool = ToolRegistry.get(choice.name)
+    kwargs: dict[str, Any] = dict(context_ids=choice.context_ids)
+    if choice.subtool:
+        kwargs["action"] = choice.subtool
+    return Turn(tool, kwargs=kwargs)

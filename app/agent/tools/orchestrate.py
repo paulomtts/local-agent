@@ -1,19 +1,19 @@
 import inspect
-import json
 import re
 
 from pydantic import BaseModel, Field
 from pygents import ContextItem, ContextQueue, Turn, tool
 
+from app.agent.tools import think
 from app.agent.tools.calendar import create, read
 from app.core.factories import get_toolkit
 from app.core.logger import log_orchestration_pipeline, log_token_usage, log_tool_use
 from app.memory import (
     ToolCall,
+    get_episodic_events,
     get_recent_context,
-    get_recent_episodic_events,
-    write_episodic_event,
 )
+from app.memory.episodic import write_episodic_event
 
 TOOL_SCHEMAS = {
     "calendar": {
@@ -125,48 +125,35 @@ async def orchestrate(memory: ContextQueue):
     log_tool_use("orchestrate")
 
     toolkit = get_toolkit()
-    working_memory = get_recent_context(memory, n=5)
-    episodic_events = get_recent_episodic_events(n=5) or "(No episodic events yet)"
-    tool_schemas = json.dumps(TOOL_SCHEMAS, indent=2)
-
     result = await toolkit.asend(
         response_model=OrchestrateCode,
         template=ORCHESTRATE_PROMPT,
-        tool_schemas=tool_schemas,
-        working_memory=working_memory,
-        episodic_events=episodic_events,
+        tool_schemas=TOOL_SCHEMAS,
+        working_memory=get_recent_context(memory, n=5),
+        episodic_events=get_episodic_events(n=5) or "(No episodic events yet)",
     )
-
     log_token_usage("orchestrate", result)
-    plan = result.content
-    if not isinstance(plan, OrchestrateCode):
-        raise ValueError("Expected OrchestrateCode, got %s" % type(plan))
 
-    tools = _make_tools(memory)
+    if not isinstance(result.content, OrchestrateCode):
+        raise ValueError("Expected OrchestrateCode, got %s" % type(result.content))
 
     try:
-        code = _extract_pipeline_code(plan.code)
+        tools = _make_tools(memory)
+        code = _extract_pipeline_code(result.content.code)
         log_orchestration_pipeline(code)
         await _run_generated_code(code, tools)
     except Exception as exc:
-        await memory.append(
-            ContextItem(
-                ToolCall(
-                    tool_name="orchestrate",
-                    result=f"Orchestration failed: {exc}",
-                    success=False,
-                )
-            )
+        tool_call = ToolCall(
+            tool_name="orchestrate",
+            result=f"Orchestration failed: {exc}",
+            success=False,
         )
+        yield ContextItem(tool_call)
+        yield Turn(think)
         write_episodic_event("orchestration pipeline failed", context=str(exc))
-        from app.agent.tools.respond import respond
-
-        return Turn(respond)
+        return
 
     write_episodic_event(
-        "agent executed orchestration pipeline", context=plan.reasoning[:120]
+        "agent executed orchestration pipeline", context=result.content.reasoning[:120]
     )
-
-    from app.agent.tools.respond import respond
-
-    return Turn(respond)
+    yield Turn(think)

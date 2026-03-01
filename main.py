@@ -16,6 +16,7 @@ async def run_agent():
         if message.lower() in ["exit", "quit"]:
             break
 
+        await agent.context_pool.clear()
         await memory.append(ContextItem(UserMessage(content=message)))
 
         first_turn = Turn(think)

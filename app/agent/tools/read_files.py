@@ -1,105 +1,152 @@
+import uuid
+from pathlib import Path
+
 from py_ai_toolkit import PyAIToolkit
 from pydantic import BaseModel, Field
 from pygents import ContextItem, ContextQueue, Turn, tool
 
 from app.agent.tools.think import think
-from app.agent.utils.file_search import (
-    deduplicate_paths,
-    read_file_contents,
-    search_files_by_content,
-    search_files_by_name,
-)
 from app.core.factories import get_toolkit
-from app.core.logger import log_token_usage
-from app.memory import ToolCall, get_user_messages_only, write_episodic_event
+from app.core.logger import log_token_usage, log_tool_use
+from app.memory import ToolCall, get_user_messages, write_episodic_event
 
-RELEVANT_KEYWORDS_PROMPT = """You must generate the relevant keywords to search for based on the user's messages.
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-# Working Memory (User Messages)
+EXCLUSION_DIRS = [
+    ".venv",
+    ".git",
+    ".pytest_cache",
+    ".ruff_cache",
+]
+
+EXCLUSION_EXTENSIONS = {".lock", ".pyc", ".pyo", ".env"}
+
+
+# ---------------------------------------------------------------------------
+# File-system utilities
+# ---------------------------------------------------------------------------
+
+
+def get_file_tree(root: str = ".") -> str:
+    """List all non-excluded source files under root, one path per line."""
+    paths = sorted(
+        str(p)
+        for p in Path(root).rglob("*")
+        if p.is_file()
+        and not any(ex in p.parts for ex in EXCLUSION_DIRS)
+        and p.suffix not in EXCLUSION_EXTENSIONS
+    )
+    return "\n".join(paths) or "(empty)"
+
+
+def read_file_contents(file_paths: list[str]) -> str:
+    """Read files and format with === path === headers."""
+    parts: list[str] = []
+    for path in file_paths:
+        try:
+            content = Path(path).read_text()
+            parts.append(f"=== {path} ===\n{content}")
+        except (OSError, UnicodeDecodeError):
+            continue
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# File selection
+# ---------------------------------------------------------------------------
+
+RELEVANT_FILES_PROMPT = """Select the files from the project file tree that are relevant to the user's request. Return their exact paths as listed in the tree.
+
+# Project File Tree
+{{ file_tree }}
+
+# Working Memory
 {{ user_messages }}
 """
 
 
-class GenerateRelevantKeywords(BaseModel):
-    "Use this to generate relevant keywords for a file search. Start with smaller words, expanding into longer expressions."
+class SelectRelevantFiles(BaseModel):
+    "Select relevant file paths from the project file tree."
 
-    keywords: list[str] = Field(
-        description="The relevant keywords to search for. Each keyword must be snake_case, containing only lowercase letters, numbers, or underscores, and must not contain any whitespace.",
-        examples=[
-            "word",
-            "snake_case",
-        ],
-        min_length=1,
-        max_length=10,
+    paths: list[str] = Field(
+        default_factory=list,
+        description="Exact file paths from the project file tree that are relevant to the user's request.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Core logic
+# ---------------------------------------------------------------------------
 
 
 async def get_file_contents(
     memory: ContextQueue,
     toolkit: PyAIToolkit,
 ) -> str:
-    user_messages = get_user_messages_only(memory, n=5)
+    user_messages = get_user_messages(memory, n=5)
+    file_tree = get_file_tree()
 
-    search = await toolkit.asend(
-        response_model=GenerateRelevantKeywords,
-        template=RELEVANT_KEYWORDS_PROMPT,
+    result = await toolkit.asend(
+        response_model=SelectRelevantFiles,
+        template=RELEVANT_FILES_PROMPT,
+        file_tree=file_tree,
         user_messages=user_messages,
     )
 
-    log_token_usage("read_files", search)
-    if not isinstance(search.content, GenerateRelevantKeywords):
-        raise ValueError(
-            "Expected GenerateRelevantKeywords, got %s" % type(search.content)
-        )
-    keywords = [
-        keyword.strip() for keyword in search.content.keywords if keyword.strip()
-    ]
-    if not keywords:
-        return "No relevant keywords found."
+    log_token_usage("read_files", result)
+    if not isinstance(result.content, SelectRelevantFiles):
+        raise ValueError("Expected SelectRelevantFiles, got %s" % type(result.content))
 
-    file_names = search_files_by_name(keywords)
-    file_names += search_files_by_content(keywords)
-    file_names = deduplicate_paths(file_names)
+    tree_paths = set(file_tree.splitlines())
+    valid_paths = [p for p in result.content.paths if p in tree_paths]
 
-    if not file_names:
+    if not valid_paths:
         return "No relevant files found."
 
-    result = read_file_contents(file_names)
-    return result or "No content read from files."
+    return read_file_contents(valid_paths) or "No content read from files."
+
+
+# ---------------------------------------------------------------------------
+# Tool
+# ---------------------------------------------------------------------------
 
 
 @tool()
 async def read_files(memory: ContextQueue):
     "Use to find and read relevant files."
+    log_tool_use("read_files")
     toolkit = get_toolkit()
     file_contents = await get_file_contents(
         memory=memory,
         toolkit=toolkit,
     )
 
-    # Deterministically log file reading event
-    if file_contents and "No relevant files found" not in file_contents:
-        # Extract file names from the result for context
-        lines = file_contents.split("\n")
-        file_mentions = [line for line in lines if line.startswith("# File:")]
-        file_count = len(file_mentions)
+    lines = file_contents.split("\n")
+    file_mentions = [
+        line for line in lines if line.startswith("=== ") and line.endswith(" ===")
+    ]
+    file_count = len(file_mentions)
 
-        if file_count > 0:
-            # Get up to 3 file names for context
-            file_names = []
-            for mention in file_mentions[:3]:
-                # Extract filename from "# File: /path/to/file.py"
-                if ":" in mention:
-                    path = mention.split(":", 1)[1].strip()
-                    file_names.append(path.split("/")[-1])
+    if file_count > 0:
+        file_names = [
+            mention[4:-4].strip().split("/")[-1] for mention in file_mentions[:3]
+        ]
 
-            context = ", ".join(file_names) if file_names else None
-            write_episodic_event(
-                event=f"agent read {file_count} file{'s' if file_count > 1 else ''}",
-                context=context,
-            )
+        write_episodic_event(
+            event=f"agent read {file_count} file{'s' if file_count > 1 else ''}",
+            context=", ".join(file_names) if file_names else None,
+        )
 
-    await memory.append(
-        ContextItem(ToolCall(tool_name="read_files", result=file_contents))
+        description = f"Files: {file_count} file(s) read ({', '.join(file_names[:3])})"
+    else:
+        description = "No relevant files found."
+
+    item_id = f"files_{uuid.uuid4().hex[:8]}"
+    tool_call = ToolCall(
+        tool_name="read_files", result=f"[pool:{item_id}] {description}"
     )
-    return Turn(think, args=[memory])
+    yield ContextItem[ToolCall](tool_call)
+    yield ContextItem[str](content=file_contents, description=description, id=item_id)
+    yield Turn(think)

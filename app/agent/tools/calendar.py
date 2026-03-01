@@ -1,39 +1,45 @@
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, Field
 from pygents import ContextItem, ContextQueue, Turn, tool
 
+from app.agent.integrations.calendar_service import CalendarEvent, CalendarService
 from app.agent.tools.respond import respond
 from app.agent.tools.think import think
 from app.core.factories import get_toolkit
 from app.core.logger import log_token_usage, log_tool_subtool_use
 from app.memory import ToolCall, get_recent_context, write_episodic_event
-from integrations.calendar_service import CalendarEvent, CalendarService
 
 
 @tool
-async def calendar(action: str | None = None):
+async def calendar(action: str | None = None, context_ids: list[str] | None = None):
     "Use to read or create calendar events."
     if action is None or action == "read":
-        return await read()
+        async for item in read():
+            yield item
+        return
     if action == "create":
-        return await create()
+        async for item in create(context_ids=context_ids):
+            yield item
+        return
     raise ValueError(f"Unknown calendar action: {action!r}")
 
 
-CREATE_EVENT_PROMPT = """Extract calendar event details from the conversation. Today is {{ today }} and the timezone is {{ timezone }}.
-Resolve relative dates (e.g. "tomorrow", "next Monday") to absolute ISO 8601 datetimes.
+CREATE_EVENT_PROMPT = """Extract calendar event details from the conversation. Today is {{ current_date }} and the timezone is {{ timezone }}. Rules:
+
+- Resolve relative dates (e.g. "tomorrow", "next Monday") to absolute ISO 8601 datetimes.
+- Determine whether you have enough information to create the event.
+- If any required field is missing or ambiguous, set ready=False and write a specific question
+for the user that includes a concrete suggestion. Ask about one missing field at a time.
+- If all required fields are present, set ready=True and populate all fields.
 
 # Working Memory (Recent Conversation)
 {{ working_memory }}
 
-Determine whether you have enough information to create the event.
-Required fields: title, start_time, end_time.
-
-If any required field is missing or ambiguous, set ready=False and write a specific question
-for the user that includes a concrete suggestion. Ask about one missing field at a time.
-
-If all required fields are present, set ready=True and populate all fields."""
+# Existing Calendar Events (for conflict checking)
+{{ existing_calendar_events }}
+"""
 
 
 class EventDraft(BaseModel):
@@ -57,40 +63,42 @@ class EventDraft(BaseModel):
     description: str = Field(default="", description="Optional event description.")
 
 
-def _format_events(service: CalendarService) -> str:
-    events = service.read_events()
-    if not events:
-        return "No calendar events found."
-
-    lines = []
-    for event in events:
-        start = event.start_time.strftime("%Y-%m-%d %H:%M")
-        end = event.end_time.strftime("%H:%M")
-        lines.append(f"- [{event.event_id}] {event.title} ({start} → {end})")
-        if event.description:
-            lines.append(f"  {event.description}")
-    return "\n".join(lines)
-
-
 @calendar.subtool
-async def read(memory: ContextQueue):
-    formatted = _format_events(CalendarService())
-    await memory.append(ContextItem(ToolCall(tool_name="calendar", result=formatted)))
+async def read():
+    "Read calendar events."
+    formatted = CalendarService.format_events()
     log_tool_subtool_use("calendar", "read")
 
-    return Turn(think)
+    events = [line for line in formatted.split("\n") if line.startswith("- [")]
+    if not events:
+        description = "No calendar events found."
+    else:
+        description = f"Calendar: {len(events)} event(s) found."
+
+    item_id = f"cal_read_{uuid.uuid4().hex[:8]}"
+    tool_call = ToolCall(
+        tool_name="calendar.read", result=f"[pool:{item_id}] {description}"
+    )
+    yield ContextItem[ToolCall](tool_call)
+    yield ContextItem[str](content=formatted, description=description, id=item_id)
+    yield Turn(think)
 
 
 @calendar.subtool
 async def create(memory: ContextQueue):
+    "Create a calendar event."
     toolkit = get_toolkit()
     working_memory = get_recent_context(memory, n=5)
+    existing_calendar_events = (
+        CalendarService.format_events() or "No calendar events found."
+    )
 
     result = await toolkit.asend(
         response_model=EventDraft,
         template=CREATE_EVENT_PROMPT,
         working_memory=working_memory,
-        today=datetime.now().isoformat(),
+        existing_calendar_events=existing_calendar_events,
+        current_date=datetime.now().isoformat(),
         timezone=datetime.now().astimezone().tzinfo,
     )
 
@@ -102,11 +110,10 @@ async def create(memory: ContextQueue):
 
     if not draft.ready or not draft.title or not draft.start_time or not draft.end_time:
         question = draft.question or "Could you provide more details about the event?"
-        await memory.append(
-            ContextItem(ToolCall(tool_name="calendar", result=question))
-        )
-
-        return Turn(respond)
+        tool_call = ToolCall(tool_name="calendar.create", result=question)
+        yield ContextItem[ToolCall](tool_call)
+        yield Turn(respond)
+        return
 
     event = CalendarEvent(
         title=draft.title,
@@ -114,10 +121,20 @@ async def create(memory: ContextQueue):
         end_time=draft.end_time,
         description=draft.description,
     )
-    CalendarService().create_event(event)
+    CalendarService.create_event(event)
     write_episodic_event(
         event=f"created calendar event: {event.title}",
         context=event.start_time.strftime("%Y-%m-%d %H:%M"),
     )
 
-    return Turn(respond)
+    item_id = f"cal_create_{uuid.uuid4().hex[:8]}"
+    description = (
+        f"Created '{draft.title}' at {draft.start_time.strftime('%Y-%m-%d %H:%M')}"
+    )
+    confirmation = f"Event created: {draft.title} ({draft.start_time.strftime('%Y-%m-%d %H:%M')} → {draft.end_time.strftime('%H:%M')})"
+    tool_call = ToolCall(
+        tool_name="calendar.create", result=f"[pool:{item_id}] {description}"
+    )
+    yield ContextItem[ToolCall](tool_call)
+    yield ContextItem[str](content=confirmation, description=description, id=item_id)
+    yield Turn(think)

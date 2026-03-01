@@ -12,12 +12,10 @@ wheels/
 # Environment variables
 .env
 
-# Context and plan docs
+# Custom
 .context/
-
-# Agent memory (created at runtime)
 .memory/
+.tools/
 
-# Database files
 database/memory.db
 database/*.db

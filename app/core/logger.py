@@ -33,7 +33,7 @@ class ColoredFormatter(Formatter):
 handler = StreamHandler()
 handler.setFormatter(
     ColoredFormatter(
-        "\033[90m%(asctime)s\033[0m | %(levelname)s - %(message)s",
+        "\033[90m%(asctime)s\033[0m | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 )
@@ -46,7 +46,11 @@ logger.addHandler(handler)
 
 
 def log_hook(hook_name: str, action: str, detail: str = "") -> None:
-    msg = f"{HOOK_TAG}[HOOK:{hook_name}:{action}]{RESET}"
+    msg = (
+        f"{HOOK_TAG}[HOOK:{hook_name}:{action}]{RESET}"
+        if detail
+        else f"{HOOK_TAG}[{hook_name}]{RESET}"
+    )
     if detail:
         msg += f" {detail}"
     logger.debug(msg)

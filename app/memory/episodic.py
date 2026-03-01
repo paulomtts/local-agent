@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.core.logger import log_task, log_token_usage
 from app.memory.queries import EPISODIC_TIMESTAMP_FORMAT
 
-EPISODIC_FILE = Path(__file__).resolve().parents[3] / ".memory" / "episodic.md"
+EPISODIC_FILE = Path(__file__).resolve().parents[2] / ".memory" / "episodic.md"
 
 EPISODIC_PROMPT = """Extract user actions/intent from the user message. Agent actions are logged deterministically elsewhere.
 
@@ -97,6 +97,28 @@ def _write_episodic_events(lines: list[str]) -> None:
         f.write("\n".join(lines) + "\n")
 
 
+async def extract_episodic_memory(user_message: str):
+    """Extract and persist user-side episodic events from conversation.
+
+    Extracts only user actions/intent using LLM. Agent actions are logged
+    deterministically by tools themselves using log_episodic_event().
+
+    Orchestrates the episodic memory extraction process:
+    1. Extract user events via LLM from user message
+    2. Format events with timestamp and type
+    3. Write events to memory file
+
+    Args:
+        user_message: Latest user message that triggered extraction
+    """
+    events = await _extract_events_from_llm(user_message)
+    if not events:
+        return
+    lines = _format_episodic_entry(events)
+    _write_episodic_events(lines)
+    log_task("episodic_memory", f"+{len(events)} event")
+
+
 def write_episodic_event(
     event: str,
     context: str | None = None,
@@ -122,26 +144,3 @@ def write_episodic_event(
     )
     lines = _format_episodic_entry([episodic_event])
     _write_episodic_events(lines)
-
-
-async def extract_episodic_memory(user_message: str):
-    """Extract and persist user-side episodic events from conversation.
-
-    Extracts only user actions/intent using LLM. Agent actions are logged
-    deterministically by tools themselves using log_episodic_event().
-
-    Orchestrates the episodic memory extraction process:
-    1. Extract user events via LLM from user message
-    2. Format events with timestamp and type
-    3. Write events to memory file
-
-    Args:
-        user_message: Latest user message that triggered extraction
-    """
-    events = await _extract_events_from_llm(user_message)
-    if not events:
-        log_task("episodic_memory", "skip")
-        return
-    lines = _format_episodic_entry(events)
-    _write_episodic_events(lines)
-    log_task("episodic_memory", f"+{len(events)} event")
